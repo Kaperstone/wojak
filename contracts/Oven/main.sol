@@ -3,64 +3,34 @@ pragma solidity ^0.8.0;
 
 contract Oven {
     /*
-    bool public burnLock = false;
     uint public tokensBurnt = 0;
-    uint public lastBurningTimestamp = 0;
+    uint public busdToBurn = 0;
+    uint public usdcToBurn = 0;
     
-    uint256 public lastBurnTimestamp = 0;
+    address public constant aBUSD = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
+    address public constant aUSDC = 0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d;
 
-    function startBurnEvent() public oncePer(86400, "Burning event can only be launched once per 24 hours") {
-        burnLock = true;
-        // Get the treasury out
-
-        // Alpaca BNB Vault withdraw
-        IVault(address(ibBNB)) .withdraw(IBEP20(address(ibBNB)).balanceOf(address(this)));
-        IVault(address(ibBUSD)).withdraw(IBEP20(address(ibBUSD)).balanceOf(address(this)));
-        VBep20(address(vUSDC)) .redeem(IBEP20(address(vUSDC)).balanceOf(address(this)));
-
-        uint BUSDBalanceWithInterest = IBEP20(aBUSD).balanceOf(this);
-        uint BUSDToBurn = 0;
-        if(BUSDBalanceWithInterest > BUSD) {
-            BUSDToBurn = BUSDBalanceWithInterest - BUSD;
-            // swapExactTokensForTokens
-        }
-
-        uint USDCBalanceWithInterest = IBEP20(aUSDC).balanceOf(this);
-        uint USDCToBurn = 0;
-        if(USDCBalanceWithInterest > USDC) {
-            USDCToBurn = USDCBalanceWithInterest - USDC;
-            // swapExactTokensForTokens
-        }
-
-        uint BNBBalanceWithInterest = address(this).balance;
-        uint BNBToBurn = 0;
-        if(BNBBalanceWithInterest > BNB) {
-            BNBToBurn = BNBBalanceWithInterest - BNB;
-            // swapExactETHForTokens
-        }
-
-        if(BNBToBurn  != 0) swapEthForTokens(BNBToBurn);
-        if(USDCToBurn != 0) swapTokensForTokens(aUSDC, USDCToBurn);
-        if(BUSDToBurn != 0) swapTokensForTokens(aBUSD, BUSDToBurn);
-
-        // Burn all the tokens we got in our wallet
-        tokensBurnt += balanceOf(address(this));
-        _burn(address(this), balanceOf(address(this)));
-
-        // Alpaca vault 
-        IVault(address(ibBNB)).deposit(address(this).balance);
-        IVault(address(ibBUSD)).deposit(IBEP20(address(aBUSD)).balanceOf(address(this)));
-        VBep20(address(vUSDC)).mint(IBEP20(address(aUSDC)).balanceOf(address(this)));
-        checkSmartContractForLeftovers();
-        burnLock = false;
+    function burnEverything() public {
+        // Take BUSD
+        // Add BUSD for WJK
+        // Swap BUSD for WJK
+        // Take USDC
+        // Add USDC amount to [usdc]
+        // Swap USDC for WJK
+        // Add WJK balance to [tokensBurnt]
+        // Burn WJK
     }
 
     function getTotalTokensBurnt() public view returns (uint256) {
         return tokensBurnt;
     }
 
-    function getLastBurnEventTimestamp() public view returns (uint256) {
-        return lastBurningTimestamp;
+    function getUSDC() public view returns (uint256) {
+        return usdcToBurn;
+    }
+    
+    function getBUSD() public view returns (uint256) {
+        return busdToBurn;
     }
 
     function swapTokensForTokens(address token, uint256 tokenAmount) private {
@@ -98,14 +68,5 @@ contract Oven {
             block.timestamp
         );
     }
-    
-    modifier oncePer(uint time, string memory errorMessage) {
-        require((lastBurningTimestamp - block.timestamp) > time, errorMessage);
-        lastBurningTimestamp = block.timestamp;
-        _;
-    }
-
-    function strcmp(string memory a, string memory b) pure public returns (bool) {
-        return (keccak256(abi.encodePacked((a))) == keccak256(abi.encodePacked((b))));
-    }*/
+    */
 }

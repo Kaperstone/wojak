@@ -20,11 +20,11 @@ const hre = require("hardhat");
  *    Bonds mint> Token
  *    Bonds fill> Treasury
  *    Bonds fill> Liquidity
- *    Staking mint> Token
+ *    Staking request.mint> Token
+ *    Vault request.mint> Token
  *    Vault profits.send> Oven (Buyback Burn)
  *    Vault mint> Staking
  *    Vault burn> Staking
- *    Staking send> Vault
  *    Oven fill> 5% to liquidity
  *    Oven profit> 5% to 0x4122
  *    Oven burn> Token
@@ -123,13 +123,21 @@ const hre = require("hardhat");
 **/
 
 async function main() {
-  const Token = await hre.ethers.getContractFactory("Token/main.sol").deploy();
+  const Token = await hre.ethers.getContractFactory("Token/Wojak.sol").deploy();
   await Token.deployed();
   console.log("Token deployed to:", Token.address);
 
-  const Staking = await hre.ethers.getContractFactory("Staking/main.sol").deploy();
+  const Staking = await hre.ethers.getContractFactory("Staking/Boomer.sol").deploy();
   await Staking.deployed();
   console.log("Staking deployed to:", Staking.address);
+
+  const Treasury = await hre.ethers.getContractFactory("Treasury/main.sol").deploy();
+  await Treasury.deployed();
+  console.log("Treasury deployed to:", Treasury.address);
+
+  const Bonds = await hre.ethers.getContractFactory("Bonds/Chad.sol").deploy();
+  await Bonds.deployed();
+  console.log("Bonds deployed to:", Bonds.address);
 }
 
 main().then(() => process.exit(0))

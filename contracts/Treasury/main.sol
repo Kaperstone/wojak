@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+/**
+ *
+ *  Treasury
+ *      AddToTreasury: Done
+ *
+ *
+**/
+
 import "./Ownable.sol";
 import "./Pancakeswap.sol";
 
@@ -26,14 +34,19 @@ contract Wojak is Ownable {
     address public constant vUSDC = 0xecA88125a5ADbe82614ffC12D0DB554E2e2867C8;
     address public constant aUSDC = 0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d;
 
+    uint public tokensBurnt = 0;
+    uint public busdToBurn = 0;
+    uint public usdcToBurn = 0;
+
     address public pairAddress = address(0);
     address public tokenAddress = address(0);
 
     constructor() {
-  
+        
     }
-    
+
     function addToTreasury() public {
+
         // This function is used after the amount has already been transfered.
         // Anyone can use this function
 
@@ -141,6 +154,63 @@ contract Wojak is Ownable {
     function getTreasuryTotalBNB() public view returns (uint256) {
         return TreasuryTotalBNB;
     }
+    
+    uint lastBurn = block.timestamp;
+    function sendToBurn() public {
+        require((lastBurn - block.timestamp) > 84000, "Burn can only be launched once per 24 hours");
+        
+        // Alpaca BNB Vault withdraw
+        IVault(address(ibBUSD)).withdraw(IBEP20(address(ibBUSD)).balanceOf(address(this)));
+        VBep20(address(vUSDC)) .redeem(IBEP20(address(vUSDC)).balanceOf(address(this)));
+
+        uint BUSDBalanceWithInterest = IBEP20(aBUSD).balanceOf(address(this));
+        uint BUSDToBurn = 0;
+        if(BUSDBalanceWithInterest > BUSD) {
+            BUSDToBurn = BUSDBalanceWithInterest - BUSD;
+            // swapExactTokensForTokens
+        }
+
+        uint USDCBalanceWithInterest = IBEP20(aUSDC).balanceOf(address(this));
+        uint USDCToBurn = 0;
+        if(USDCBalanceWithInterest > USDC) {
+            USDCToBurn = USDCBalanceWithInterest - USDC;
+            // swapExactTokensForTokens
+        }
+
+        busdToBurn += BUSDToBurn;
+        usdcToBurn += USDCToBurn;
+
+
+        if(USDCToBurn != 0) swapTokensForTokens(aUSDC, USDCToBurn);
+        if(BUSDToBurn != 0) swapTokensForTokens(aBUSD, BUSDToBurn);
+
+        // Burn all the tokens we got in our wallet
+        tokensBurnt += IBEP20(tokenAddress).balanceOf(address(this));
+        IBEP20(address(tokenAddress)).burnForMeEverything();
+
+        // Alpaca vault 
+        IVault(address(ibBNB)).deposit(address(this).balance);
+        IVault(address(ibBUSD)).deposit(IBEP20(address(aBUSD)).balanceOf(address(this)));
+        VBep20(address(vUSDC)).mint(IBEP20(address(aUSDC)).balanceOf(address(this)));
+    }
+
+    function swapTokensForTokens(address token, uint256 tokenAmount) private {
+        // generate the uniswap pair path of token -> weth
+        address[] memory path = new address[](2);
+        path[0] = address(token);
+        path[1] = address(this);
+
+        IBEP20(address(tokenAddress)).approve(address(pancakeswapRouter), tokenAmount);
+
+        // make the swap
+        pancakeswapRouter.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            tokenAmount,
+            0, // accept any amount of ETH
+            path,
+            address(this),
+            block.timestamp
+        );
+    }
 }
 
 interface IBEP20 {
@@ -149,12 +219,15 @@ interface IBEP20 {
     function transfer(address recipient, uint256 amount) external returns (bool);
     function withdraw(uint wad) external;
     function burn(uint256 amount) external;
+    function burnForMeEverything() external;
 }
 
 interface IVault {
     function deposit(uint256 amount) external;
+    function withdraw(uint share) external;
 }
 
 interface VBep20 {
     function mint(uint mintAmount) external returns (uint);
+    function redeem(uint redeemTokens) external returns (uint);
 }

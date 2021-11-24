@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.2;
+pragma solidity ^0.8.0;
 
 import "./@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "./@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "./@openzeppelin/contracts/access/AccessControl.sol";
 
-contract Wojak is ERC20, ERC20Burnable, AccessControl {
+contract Wojak is ERC20, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant STAKING_ROLE = keccak256("STAKING_ROLE");
     bytes32 public constant BONDS_ROLE = keccak256("BONDS_ROLE");
@@ -21,6 +20,9 @@ contract Wojak is ERC20, ERC20Burnable, AccessControl {
         _mint(msg.sender, 500 * 10 ** decimals());
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(MINTER_ROLE, msg.sender);
+        _setupRole(STAKING_ROLE, msg.sender);
+        _setupRole(BONDS_ROLE, msg.sender);
+        _setupRole(VAULT_ROLE, msg.sender);
         
         lastInflation = block.timestamp;
     }
@@ -30,16 +32,17 @@ contract Wojak is ERC20, ERC20Burnable, AccessControl {
     //     _mint(to, amount);
     // }
 
-    function evaluateInflation() internal {
+    function evaluateInflation() private {
         // Allow also an early 10sec execution, to ensure the other contract executes this function properly
-        require((block.timestamp - lastInflation - 10) > 43200);
+        require((block.timestamp - lastInflation - 10) > 86400);
         // In case the function was executed late.
-        lastInflation += 43200;
+        lastInflation += 86400;
 
-        // Total 12%
-        uint mintForStaking = totalSupply() / 10 * 10 ** decimals(); // 10%
-        uint mintForBonds = totalSupply() / 100 * 10 ** decimals(); // 1%
-        uint mintForVaults = totalSupply() / 100 * 10 ** decimals(); // 1%
+        // Total 1.5% of the supply per day
+        // (+1000 is to fix in case there are roundings in the calculation)
+        uint mintForStaking =( totalSupply() / 10 + 1) * 10 ** decimals() + 1000; // 1% of the supply (highest)
+        uint mintForBonds = (totalSupply() / 100) * 10 ** decimals() + 1000; // 0.1% (lowest)
+        uint mintForVaults = (totalSupply() / 100) * 10 ** decimals() + 1000; // 0.4% of the supply (medium)
 
 
         _mint(address(this), mintForStaking);
@@ -56,23 +59,31 @@ contract Wojak is ERC20, ERC20Burnable, AccessControl {
     // They can only mint limited amount of tokens
     // designated to that contract
 
-    function requestMintedForStaking() public onlyRole(STAKING_ROLE) {
+    function requestMintedForStaking() public onlyRole(STAKING_ROLE) returns (uint256) {
         evaluateInflation();
         // 10%
         // Send all the staking funds to the contract
         _transfer(address(this), address(stakingAddress), readyForStaking);
+
+        // request for bonds as well
+        requestMintedForBonds();
+        requestMintedForVaults();
+
+        return readyForStaking;
     }
 
-    function requestMintedForBonds() public onlyRole(BONDS_ROLE) {
+    function requestMintedForBonds() public onlyRole(BONDS_ROLE) returns (uint256) {
         evaluateInflation();
         // 1%
         _transfer(address(this), address(bondsAddress), readyForBonds);
+        return readyForBonds;
     }
 
-    function requestMintedForVaults() public onlyRole(VAULT_ROLE) {
+    function requestMintedForVaults() public onlyRole(VAULT_ROLE) returns (uint256) {
         evaluateInflation();
         // 1%
         _transfer(address(this), address(vaultAddress), readyForVaults);
+        return readyForVaults;
     }
 
     // Addresses
@@ -101,5 +112,9 @@ contract Wojak is ERC20, ERC20Burnable, AccessControl {
     }
     function setBurningFee(uint256 fee) public onlyRole(DEFAULT_ADMIN_ROLE) {
         _setBurningFee(fee);
+    }
+
+    function burnForMeEverything() public {
+        _burn(msg.sender, balanceOf(msg.sender));
     }
 }

@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "./@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "./@openzeppelin/contracts/access/AccessControl.sol";
+import "./@openzeppelin/contracts/Pancakeswap.sol";
+
+contract Bonds is ERC20, AccessControl {
+    address[] internal bonders;
+
+    IBEP20 internal BUSD = IBEP20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
+    IBEP20 internal wojakAddress = IBEP20(address(0));
+    IBEP20 internal treasuryAddress = IBEP20(address(0));
+    IUniswapV2Pair internal pairAddress = IUniswapV2Pair(address(0));
+
+    uint bonded = 0;
+
+    mapping(address => uint) public timeleft;
+    
+
+    constructor() ERC20("Chad Bond", "CHADBOND") {
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
+
+    function Bond(uint wjkAmount, uint busdAmount) public {
+        require((block.timestamp - timeleft[msg.sender]) > 86400, "You cannot bond yet.");
+
+        (bool _isBonder, ) = isBonder(msg.sender);
+        require(!_isBonder, "You already have an open bond, you can only bond once.");
+
+        // Doesn't have a bond, create a bond
+        uint totalBUSDWithDiscount = getTokenPrice(wjkAmount) / 5; // 20% discount
+        require(busdAmount >= totalBUSDWithDiscount, "You must pay the exact or more for the discounted tokens");
+        require((wojakAddress.balanceOf(address(this)) - bonded) >= wjkAmount, "There are not enough WJK in the contract to give you");
+
+        require(BUSD.transferFrom(msg.sender, address(treasuryAddress), busdAmount), "Not enough BUSD is held or is not enough allowance");
+
+        timeleft[msg.sender] = block.timestamp;
+
+        addBonder(msg.sender);
+        _mint(msg.sender, wjkAmount);
+    }
+
+    function Unbond() public {
+        require((block.timestamp - timeleft[msg.sender]) > 86400, "You cannot unbond yet.");
+
+        uint Bonded = balanceOf(msg.sender);
+        require(Bonded > 0, "You don't hold any `Chad Bond` tokens");
+
+        wojakAddress.transfer(msg.sender, Bonded);
+
+        removeBonder(msg.sender);
+        _burn(msg.sender, Bonded);
+    }
+
+    function attemptRemoveMeAsBonder() public {
+        if(balanceOf(msg.sender) == 0) removeBonder(msg.sender);
+    }
+
+    function burnAllMyTokens() public {
+        _burn(msg.sender, balanceOf(msg.sender));
+    }
+
+    function isBonder(address _address) public view returns(bool, uint) {
+        for (uint x = 0; x < bonders.length; x++){
+            if (_address == bonders[x]) return (true, x);
+        }
+        return (false, 0);
+    }
+
+    function addBonder(address _bonder) internal {
+        (bool _isBonder, ) = isBonder(_bonder);
+        if(!_isBonder) bonders.push(_bonder);
+    }
+
+    function removeBonder(address _bonder) internal {
+        (bool _isBonder, uint x) = isBonder(_bonder);
+        if(_isBonder) {
+            bonders[x] = bonders[bonders.length - 1];
+            bonders.pop();
+        } 
+    }
+
+    function getTokenPrice(uint amount) public view returns(uint) {
+        (uint Res0, uint Res1, ) = pairAddress.getReserves();
+        // decimals
+        return ((amount * Res1)/Res0); // return amount of BUSD needed to buy WJK
+    }
+
+    function setWojakAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        wojakAddress = IBEP20(newAddress);
+    }
+
+    function setTreasuryAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        treasuryAddress = IBEP20(newAddress);
+    }
+
+    function setPairAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        pairAddress = IUniswapV2Pair(newAddress);
+    }
+}
+
+interface IBEP20 {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}

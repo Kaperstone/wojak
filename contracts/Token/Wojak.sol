@@ -56,7 +56,7 @@ contract Wojak is ERC20, AccessControl {
 
         // Total 1.5% of the supply per day
         // (+1000 is to fix in case there are roundings in the calculation)
-        uint mintForStaking =(quarterForStaking * boo + 1) * 10 ** decimals() + 1000; // 1% of the supply (highest)
+        uint mintForStaking = (quarterForStaking * boo + 1) * 10 ** decimals() + 1000; // 1% of the supply (highest)
         uint mintForBonds = (quarterForBonds * boo) * 10 ** decimals() + 1000; // 0.1% (lowest)
         uint mintForVaults = (quarterForVaults * boo) * 10 ** decimals() + 1000; // 0.4% of the supply (medium)
 

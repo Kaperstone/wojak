@@ -19,10 +19,19 @@ contract Wojak is Ownable {
     uint public BUSDinTreasury = 0;
     uint public BNBConverted = 0;
 
-    IBEP20 public constant WBNB = IBEP20(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
-    IBEP20 public constant vBUSD = IBEP20(0x95c78222B3D6e262426483D42CfA53685A67Ab9D);
-    IBEP20 public constant BUSD = IBEP20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
-    IBEP20 public constant XVS = IBEP20(0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63);
+    address public WBNB_address = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+    IBEP20 public WBNB = IBEP20(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
+
+    address public vBUSD_address = 0x95c78222B3D6e262426483D42CfA53685A67Ab9D;
+    IBEP20 public vBUSD = IBEP20(0x95c78222B3D6e262426483D42CfA53685A67Ab9D);
+
+    address public BUSD_address = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
+    IBEP20 public BUSD = IBEP20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
+
+    address public XVS_address = 0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63;
+    IBEP20 public XVS = IBEP20(0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63);
+
+    address public UNITROLLER_address = 0xfD36E2c2a6789Db23113685031d7F16329158384;
 
     uint public tokensBurnt = 0;
     uint public busdToBurn = 0;
@@ -53,7 +62,7 @@ contract Wojak is Ownable {
             BUSDinTreasury += amount;
 
             // Approve for vBUSD to spend my BUSD
-            BUSD.approve(0x95c78222B3D6e262426483D42CfA53685A67Ab9D, amount);
+            BUSD.approve(vBUSD_address, amount);
             vBUSD.mint(amount);
         }
         
@@ -101,18 +110,12 @@ contract Wojak is Ownable {
             block.timestamp
         );
     }
-
-    function setTokenAddress(address newAddress) public onlyOwner {
-        require(newAddress != address(tokenAddress), "The router already has that address");
-        tokenAddress = IBEP20(newAddress);
-        tokenClearAddress = newAddress;
-    }
     
     function withdrawUselessToken(address tAddress) public {
         // Protocol's tokens.
-        require(address(tAddress) != address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c), "Protocol's ownership."); // WBNB
-        require(address(tAddress) != address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56), "Protocol's ownership."); // vBUSD
-        require(address(tAddress) != address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56), "Protocol's ownership."); // BUSD
+        require(address(tAddress) != address(WBNB_address), "Protocol's ownership."); // WBNB
+        require(address(tAddress) != address(BUSD_address), "Protocol's ownership."); // BUSD
+        require(address(tAddress) != address(vBUSD_address), "Protocol's ownership."); // vBUSD
 
         // I'm like a pigeon, eating bits and crumbs.
         uint balance = IBEP20(address(tAddress)).balanceOf(address(this));
@@ -139,12 +142,12 @@ contract Wojak is Ownable {
 
         busdToBurn += BUSDToBurn;
 
-        IVenusComptroller(0xfD36E2c2a6789Db23113685031d7F16329158384).claimVenus(address(this));
+        IVenusComptroller(UNITROLLER_address).claimVenus(address(this));
 
         uint xvsBalance = XVS.balanceOf(address(this));
 
-        if(xvsBalance > 0) swapTokensForWJK(0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63, xvsBalance);
-        if(BUSDToBurn != 0) swapTokensForWJK(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56, BUSDToBurn);
+        if(xvsBalance > 0) swapTokensForWJK(XVS_address, xvsBalance);
+        if(BUSDToBurn != 0) swapTokensForWJK(BUSD_address, BUSDToBurn);
 
         // Burn all the tokens we got in our wallet
         tokensBurnt += tokenAddress.balanceOf(address(this));
@@ -171,6 +174,37 @@ contract Wojak is Ownable {
             block.timestamp
         );
     }
+
+    // onlyOwner functions
+    
+    function setPancakeAddress(address newAddress) public onlyOwner {
+        require(IUniswapV2Router02(newAddress) != pancakeswapRouter, "The router already has that address");
+        pancakeswapRouter = IUniswapV2Router02(newAddress);
+    }
+
+    function setTokenAddress(address newAddress) public onlyOwner {
+        require(newAddress != address(tokenClearAddress), "The router already has that address");
+        tokenAddress = IBEP20(newAddress);
+        tokenClearAddress = newAddress;
+    }
+
+    function setWBNBAddress(address newAddress) public onlyOwner {
+        WBNB_address = newAddress;
+        WBNB = IBEP20(newAddress);
+    }
+
+    function setvenusBUSDAddress(address newAddress) public onlyOwner {
+        vBUSD_address = newAddress;
+        vBUSD = IBEP20(newAddress);
+    }
+    function setBUSDAddress(address newAddress) public onlyOwner {
+        BUSD_address = newAddress;
+        BUSD = IBEP20(newAddress);
+    }
+
+    function setUnitrollerAddress(address newAddress) public onlyOwner {
+        UNITROLLER_address = newAddress;
+    }
 }
 
 interface IBEP20 {
@@ -186,6 +220,4 @@ interface IBEP20 {
 
 interface IVenusComptroller {
   function claimVenus(address holder) external;
-  function claimVenus(address holder, address[] calldata vTokens) external;
-  function claimVenus(address[] calldata holders, address[] calldata vTokens, bool borrowers, bool suppliers) external;
 }

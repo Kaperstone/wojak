@@ -32,17 +32,33 @@ contract Wojak is ERC20, AccessControl {
     //     _mint(to, amount);
     // }
 
+    uint boo = 4;
+
+    function requestQuarterIncreaseInInflation() public onlyRole(STAKING_ROLE) {
+        // Maximum 3.0%
+        if(boo + 1 < 8) boo++;
+    }
+
+    function requestQuarterDecreaseInInflation() public onlyRole(STAKING_ROLE) {
+        // Minimum 1.5%
+        if(boo - 1 > 4) boo--;
+    }
+
     function evaluateInflation() private {
         // Allow also an early 10sec execution, to ensure the other contract executes this function properly
         require((block.timestamp - lastInflation - 10) > 86400);
         // In case the function was executed late.
         lastInflation += 86400;
 
+        uint quarterForStaking = totalSupply() / 100 / 4;
+        uint quarterForBonds = totalSupply() / 1000 / 4;
+        uint quarterForVaults = totalSupply() / 250 / 4;
+
         // Total 1.5% of the supply per day
         // (+1000 is to fix in case there are roundings in the calculation)
-        uint mintForStaking =( totalSupply() / 10 + 1) * 10 ** decimals() + 1000; // 1% of the supply (highest)
-        uint mintForBonds = (totalSupply() / 100) * 10 ** decimals() + 1000; // 0.1% (lowest)
-        uint mintForVaults = (totalSupply() / 100) * 10 ** decimals() + 1000; // 0.4% of the supply (medium)
+        uint mintForStaking =(quarterForStaking * boo + 1) * 10 ** decimals() + 1000; // 1% of the supply (highest)
+        uint mintForBonds = (quarterForBonds * boo) * 10 ** decimals() + 1000; // 0.1% (lowest)
+        uint mintForVaults = (quarterForVaults * boo) * 10 ** decimals() + 1000; // 0.4% of the supply (medium)
 
 
         _mint(address(this), mintForStaking);

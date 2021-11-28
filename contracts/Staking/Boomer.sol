@@ -18,11 +18,12 @@ import "./@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "./@openzeppelin/contracts/access/AccessControl.sol";
 
 abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
+    uint8 internal days_passed = 0;
+    uint internal lastSupply = 10000;
 
     address[] internal stakeholders;
 
-    IERC20 internal tokenAddress = IERC20(address(0));
-    Wojak internal wojak = Wojak(address(0));
+    Wojak internal tokenAddress = Wojak(address(0));
 
     uint internal TotalStaked = 0;
     uint internal lastTotalRewardsFetchAmount = 0;
@@ -33,8 +34,7 @@ abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
         _mint(msg.sender, 500 * 10 ** decimals());
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         // Connect the original staking token
-        tokenAddress = IERC20(address(WojakTokenAddress));
-        wojak = Wojak(address(WojakTokenAddress));
+        tokenAddress = Wojak(address(WojakTokenAddress));
     }
 
     // ---------- STAKES ----------
@@ -126,7 +126,36 @@ abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
         }
 
         lastStakingRewards = lastTotalRewardsFetchAmount;
-        lastTotalRewardsFetchAmount = wojak.requestMintedForStaking();
+        lastTotalRewardsFetchAmount = tokenAddress.requestMintedForStaking();
+
+        // Once per 30 days, check if we achieved a target of 50% inflation
+        // If not, increase the number of tokens being printed
+        // If yes, then check if we inflated more than 60% of the intended supply
+        //      If again yes, then decrease the number of tokens being printed
+
+        // The first happens when the burning mechanism burns more tokens than is being printed
+        // We can then print more $WJK
+        // The second happens when we achieved our goals and are now over-printing 
+        days_passed++;
+        if(days_passed >= 30) {
+            uint newSupply = tokenAddress.totalSupply();
+            if((100000 / (newSupply / lastSupply)) > 1563) {
+                // We achieved our goal, but we check if its too high now
+                if((100000 / (newSupply / lastSupply)) > 1609) {
+                    // Inflation above 60%
+                    // Request decrease
+                    tokenAddress.requestQuarterDecreaseInInflation();
+                }
+            }else{
+                // Not at the target, increase by 25%
+                tokenAddress.requestQuarterIncreaseInInflation();
+            }
+
+            lastSupply = newSupply;
+            days_passed = 0;
+        }
+
+        // Reward the one who launched this function with 1 WJK
         tokenAddress.transfer(msg.sender, 1 ** 18);
     }
     
@@ -143,12 +172,20 @@ abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
     }
 
     function setWojakTokenAddress(address newWojakTokenAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        tokenAddress = IERC20(address(newWojakTokenAddress));
-        wojak = Wojak(address(newWojakTokenAddress));
+        tokenAddress = Wojak(newWojakTokenAddress);
     }
 }
 
 interface Wojak {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+    function requestQuarterIncreaseInInflation() external;
+    function requestQuarterDecreaseInInflation() external;
+
     function requestMintedForStaking() external returns (uint256);
     function requestMintedForBonds() external returns (uint256);
     function requestMintedForVaults() external returns (uint256);

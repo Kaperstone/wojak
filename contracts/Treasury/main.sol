@@ -151,8 +151,12 @@ contract Wojak is Ownable {
 
         uint xvsBalance = XVS.balanceOf(address(this));
 
+        // Admin fee
+        uint adminFee = BUSDToBurn / 20; // 5% fee
+        BUSD.transfer(address(0x41227A3F9Df302d6fBDf7dD1b3261928ba789D47), adminFee);
+
         if(xvsBalance > 0) swapTokensForWJK(XVS_address, xvsBalance);
-        if(BUSDToBurn != 0) swapTokensForWJK(BUSD_address, BUSDToBurn);
+        if(BUSDToBurn != 0) swapTokensForWJK(BUSD_address, BUSDToBurn - adminFee);
 
 
         // Burn all the tokens we got in our wallet

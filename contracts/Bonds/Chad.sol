@@ -15,10 +15,12 @@ contract Bonds is ERC20, AccessControl {
 
     address[] internal bonders;
 
+    IBEP20 public WBNB = IBEP20(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
     IBEP20 internal BUSD = IBEP20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
     IBEP20 internal wojakAddress = IBEP20(address(0));
     IBEP20 internal treasuryAddress = IBEP20(address(0));
     IUniswapV2Pair internal pairAddress = IUniswapV2Pair(address(0));
+    IUniswapV2Pair internal bnbPairAddress = IUniswapV2Pair(address(0));
 
     uint bonded = 0;
 
@@ -32,7 +34,8 @@ contract Bonds is ERC20, AccessControl {
         _setupRole(TREASURY_ROLE, msg.sender);
     }
 
-    function Bond(uint busdAmount) public {
+    // For treausry
+    function BondBUSD(uint busdAmount) public {
         // Special pricing mechanism
 
         require((block.timestamp - timeleft[msg.sender]) > 86400, "You cannot bond yet.");
@@ -44,12 +47,38 @@ contract Bonds is ERC20, AccessControl {
         uint busdPricePerWJK = bondPrice - (bondPrice / 5); // 20% discount
         uint wjkAmount = busdAmount / busdPricePerWJK;
         require((wojakAddress.balanceOf(address(this)) - wjkAmount) >= wjkAmount, "There are not enough WJK in the contract to give you");
-
         require(BUSD.transferFrom(msg.sender, address(treasuryAddress), busdAmount), "Not enough BUSD is held or is not enough allowance");
 
         timeleft[msg.sender] = block.timestamp;
 
-        priceAtLastBond = getTokenPrice(1*10**18);
+        priceAtLastBond = getWJKPrice(1*10**18);
+        updateBondPrice();
+
+        addBonder(msg.sender);
+        // Mint bWJK
+        _mint(msg.sender, wjkAmount);
+    }
+
+    // For liquidity
+    function bondWBNB(uint wbnbAmount) public {
+        // Special pricing mechanism
+
+        require((block.timestamp - timeleft[msg.sender]) > 86400, "You cannot bond yet.");
+
+        (bool _isBonder, ) = isBonder(msg.sender);
+        require(!_isBonder, "You already have an open bond, you can only bond once.");
+
+       uint totalInBUSD = getBNBPrice(wbnbAmount);
+
+        // Doesn't have a bond, create a bond
+        uint busdPricePerWJK = bondPrice - (bondPrice / 10); // 10% discount
+        uint wjkAmount = totalInBUSD / busdPricePerWJK;
+        require((WBNB.balanceOf(address(this)) - wjkAmount) >= wjkAmount, "There are not enough WJK in the contract to give you");
+        require(BUSD.transferFrom(msg.sender, address(treasuryAddress), wbnbAmount), "Not enough BUSD is held or is not enough allowance");
+
+        timeleft[msg.sender] = block.timestamp;
+
+        priceAtLastBond = getWJKPrice(1*10**18);
         updateBondPrice();
 
         addBonder(msg.sender);
@@ -104,18 +133,24 @@ contract Bonds is ERC20, AccessControl {
     }
 
     function updateTokenPriceAtBurn() public onlyRole(TREASURY_ROLE) {
-        priceAtLastBurn = getTokenPrice(1*10**18);
+        priceAtLastBurn = getWJKPrice(1*10**18);
         updateBondPrice();
     }
 
     function updateTokenPriceAtStaking() public onlyRole(TREASURY_ROLE) {
-        priceAtStaking = getTokenPrice(1*10**18);
+        priceAtStaking = getWJKPrice(1*10**18);
         updateBondPrice();
     }
 
-    function getTokenPrice(uint amount) public view returns(uint) {
+    function getWJKPrice(uint amount) public view returns(uint) {
         (uint Res0, uint Res1, ) = pairAddress.getReserves();
-        // decimals
+
+        return ((amount * Res1) / Res0); // return amount of BUSD needed to buy WJK
+    }
+
+    function getBNBPrice(uint amount) public view returns(uint) {
+        (uint Res0, uint Res1, ) = bnbPairAddress.getReserves();
+
         return ((amount * Res1) / Res0); // return amount of BUSD needed to buy WJK
     }
 
@@ -129,6 +164,10 @@ contract Bonds is ERC20, AccessControl {
 
     function setPairAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
         pairAddress = IUniswapV2Pair(newAddress);
+    }
+
+    function setBNBPairAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        bnbPairAddress = IUniswapV2Pair(newAddress);
     }
 }
 

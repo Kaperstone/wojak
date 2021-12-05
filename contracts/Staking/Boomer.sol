@@ -114,6 +114,7 @@ abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
 
     // Distribute once per 24 hours
     function distributeRewards() public {
+        // Flash loan
         require(lastBlockNum != block.number, "!");
         lock = true;
         lastBlockNum = block.number;

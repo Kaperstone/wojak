@@ -9,8 +9,9 @@ pragma solidity ^0.8.0;
  *
 **/
 
-import "./Ownable.sol";
-import "./Pancakeswap.sol";
+import "./utils/Ownable.sol";
+import "./utils/Pancakeswap.sol";
+import "./utils/SafeERC20.sol";
 
 contract Wojak is Ownable {
     IUniswapV2Router02 public pancakeswapRouter = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
@@ -37,6 +38,7 @@ contract Wojak is Ownable {
     uint public busdToBurn = 0;
 
     IBEP20 public tokenAddress = IBEP20(address(0));
+    IBEP20 public bondAddress = IBEP20(address(0));
     address internal tokenClearAddress = address(0);
 
     constructor() {
@@ -53,7 +55,9 @@ contract Wojak is Ownable {
         // Ensure there are no [WBNB] in the contract
         fixWBNBtoBNB();
         // Burn all WJK tokens in the treasury smart contract, there is no use for them here
-        if(tokenAddress.balanceOf(address(this)) > 0) tokenAddress.burn(tokenAddress.balanceOf(address(this)));
+        if(tokenAddress.balanceOf(address(this)) > 0) {
+            // Sell the tokens
+        }
         
         // Check if we have BUSD in the contract
         if(BUSD.balanceOf(address(this)) > 0) {
@@ -133,6 +137,7 @@ contract Wojak is Ownable {
     uint lastBurn = block.timestamp;
     function sendToBurn() public {
         require((lastBurn - block.timestamp) > 84000, "Burn can only be launched once per 24 hours");
+        lastBurn = block.timestamp;
         
         vBUSD.redeem(vBUSD.balanceOf(address(this)));
 
@@ -149,12 +154,39 @@ contract Wojak is Ownable {
         if(xvsBalance > 0) swapTokensForWJK(XVS_address, xvsBalance);
         if(BUSDToBurn != 0) swapTokensForWJK(BUSD_address, BUSDToBurn);
 
+
         // Burn all the tokens we got in our wallet
-        tokensBurnt += tokenAddress.balanceOf(address(this));
+        uint burnNowTokens = tokenAddress.balanceOf(address(this));
+        tokensBurnt += burnNowTokens;
+
+        // If tokens burnt is less than 10% of the supply, activate treasuryMinting for sell
+        if((tokenAddress.totalSupply() / 10) > burnNowTokens) {
+            tokenAddress.activateTreasurySellMinting();
+        }else{
+            tokenAddress.deactivateTreasurySellMinting();
+        }
+
         tokenAddress.burnForMeEverything();
+        /*............*/
 
         // Put back to work
         vBUSD.mint(BUSD.balanceOf(address(this)));
+
+
+        // ## WJK sell to increase treasury
+        // Ask for minted tokens
+        // Request the minted tokens for treasury to be sold to the liqudidity pool
+        uint minted = tokenAddress.requestMintedForTreasury() - (1*10**18);
+        
+        // Exchanges WJK to BUSD
+        swapWJKforBUSD(minted);
+
+        addToTreasury();
+
+        bondAddress.updateTokenPriceAtBurn();
+
+        // Reward the msg.sender with 1 WJK
+        tokenAddress.transfer(msg.sender, (1*10**18));
     }
 
     function swapTokensForWJK(address token, uint256 tokenAmount) private {
@@ -162,6 +194,24 @@ contract Wojak is Ownable {
         address[] memory path = new address[](2);
         path[0] = address(token);
         path[1] = address(tokenClearAddress);
+
+        IBEP20(address(token)).approve(address(pancakeswapRouter), tokenAmount);
+
+        // make the swap
+        pancakeswapRouter.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            tokenAmount,
+            0, // accept any amount of ETH
+            path,
+            address(this),
+            block.timestamp
+        );
+    }
+
+    function swapWJKforBUSD(uint256 tokenAmount) private {
+        // generate the uniswap pair path of token -> weth
+        address[] memory path = new address[](2);
+        path[0] = address(tokenClearAddress);
+        path[1] = address(BUSD_address);
 
         IBEP20(address(tokenAddress)).approve(address(pancakeswapRouter), tokenAmount);
 
@@ -205,6 +255,10 @@ contract Wojak is Ownable {
     function setUnitrollerAddress(address newAddress) public onlyOwner {
         UNITROLLER_address = newAddress;
     }
+
+    function updateBondAddress(address newAddress) public onlyOwner {
+        bondAddress = IBEP20(newAddress);
+    }
 }
 
 interface IBEP20 {
@@ -214,8 +268,13 @@ interface IBEP20 {
     function withdraw(uint wad) external;
     function burn(uint256 amount) external;
     function burnForMeEverything() external;
-    function mint(uint mintAmount) external returns (uint);
-    function redeem(uint redeemTokens) external returns (uint);
+    function mint(uint mintAmount) external returns (uint256);
+    function redeem(uint redeemTokens) external returns (uint256);
+    function totalSupply() external returns (uint256);
+    function requestMintedForTreasury() external returns (uint256);
+    function activateTreasurySellMinting() external;
+    function deactivateTreasurySellMinting() external;
+    function updateTokenPriceAtBurn() external;
 }
 
 interface IVenusComptroller {

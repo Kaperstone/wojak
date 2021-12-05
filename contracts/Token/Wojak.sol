@@ -8,11 +8,15 @@ contract Wojak is ERC20, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant STAKING_ROLE = keccak256("STAKING_ROLE");
     bytes32 public constant BONDS_ROLE = keccak256("BONDS_ROLE");
-    bytes32 public constant VAULT_ROLE = keccak256("VAULT_ROLE");
+    bytes32 public constant TREASURY_ROLE = keccak256("TREASURY_ROLE");
+
+    Treasury treasury = Treasury(address(0));
 
     uint readyForStaking = 0;
     uint readyForBonds = 0;
-    uint readyForVaults = 0;
+    uint readyForTreasury = 0;
+    
+    bool treasuryMint = false;
 
     uint lastInflation = 0;
 
@@ -22,7 +26,7 @@ contract Wojak is ERC20, AccessControl {
         _setupRole(MINTER_ROLE, msg.sender);
         _setupRole(STAKING_ROLE, msg.sender);
         _setupRole(BONDS_ROLE, msg.sender);
-        _setupRole(VAULT_ROLE, msg.sender);
+        _setupRole(TREASURY_ROLE, msg.sender);
         
         lastInflation = block.timestamp;
     }
@@ -32,16 +36,16 @@ contract Wojak is ERC20, AccessControl {
     //     _mint(to, amount);
     // }
 
-    uint boo = 4;
+    uint booster = 4;
 
     function requestQuarterIncreaseInInflation() public onlyRole(STAKING_ROLE) {
         // Maximum 3.0%
-        if(boo + 1 < 8) boo++;
+        if(booster + 1 < 8) booster++;
     }
 
     function requestQuarterDecreaseInInflation() public onlyRole(STAKING_ROLE) {
         // Minimum 1.5%
-        if(boo - 1 > 4) boo--;
+        if(booster - 1 > 4) booster--;
     }
 
     function evaluateInflation() private {
@@ -52,13 +56,12 @@ contract Wojak is ERC20, AccessControl {
 
         uint quarterForStaking = totalSupply() / 100 / 4;
         uint quarterForBonds = totalSupply() / 1000 / 4;
-        uint quarterForVaults = totalSupply() / 250 / 4;
 
         // Total 1.5% of the supply per day
         // (+1000 is to fix in case there are roundings in the calculation)
-        uint mintForStaking = (quarterForStaking * boo + 1) * 10 ** decimals() + 1000; // 1% of the supply (highest)
-        uint mintForBonds = (quarterForBonds * boo) * 10 ** decimals() + 1000; // 0.1% (lowest)
-        uint mintForVaults = (quarterForVaults * boo) * 10 ** decimals() + 1000; // 0.4% of the supply (medium)
+        uint mintForStaking = (quarterForStaking * booster) * 10 ** decimals() + 1000; // 1% of the supply (highest)
+        uint mintForBonds = (quarterForBonds * booster * 3) * 10 ** decimals() + 1000; // 0.3% * Booster
+        uint mintForSell = (totalSupply() / 1000 + 1) * 10 ** decimals(); // 0.1% always go to sell to fill the treasury + 1 for burning reward
 
 
         _mint(address(this), mintForStaking);
@@ -67,8 +70,18 @@ contract Wojak is ERC20, AccessControl {
         _mint(address(this), mintForBonds);
         readyForBonds += mintForBonds;
 
-        _mint(address(this), mintForVaults);
-        readyForVaults += mintForVaults;
+        // We start to create tokens and sell to increase the treasury supply
+        // When the treasury size is too small to cope with the inflation
+        if(treasuryMint) {
+            _mint(address(this), mintForSell);
+            readyForTreasury += mintForSell;
+        }
+
+        if((treasury.treasurySize() / 50) < totalSupply()) {
+            _setBurningFee(100); // Activate the burning mechnanism
+        }else{
+            _setBurningFee(0);
+        }
     }
 
     // Even if the contracts are hacked, someday, somehow
@@ -80,10 +93,11 @@ contract Wojak is ERC20, AccessControl {
         // 10%
         // Send all the staking funds to the contract
         _transfer(address(this), address(stakingAddress), readyForStaking);
+        readyForStaking = 0;
 
         // request for bonds as well
         requestMintedForBonds();
-        requestMintedForVaults();
+        requestMintedForTreasury();
 
         return readyForStaking;
     }
@@ -92,25 +106,25 @@ contract Wojak is ERC20, AccessControl {
         evaluateInflation();
         // 1%
         _transfer(address(this), address(bondsAddress), readyForBonds);
+        readyForBonds = 0;
         return readyForBonds;
     }
 
-    function requestMintedForVaults() public onlyRole(VAULT_ROLE) returns (uint256) {
+    function requestMintedForTreasury() public onlyRole(TREASURY_ROLE) returns (uint256) {
         evaluateInflation();
         // 1%
-        _transfer(address(this), address(vaultAddress), readyForVaults);
-        return readyForVaults;
+        _transfer(address(this), address(treasuryAddress), readyForTreasury);
+        readyForTreasury = 0;
+        return readyForTreasury;
     }
 
     // Addresses
     function updateTreasuryAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
         _updateTreasuryAddress(newAddress);
+        treasury = Treasury(newAddress);
     }
     function updateBondsAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
         _updateBondsAddress(newAddress);
-    }
-    function updateVaultAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        _updateVaultAddress(newAddress);
     }
     function updateOvenAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
         _updateOvenAddress(newAddress);
@@ -133,4 +147,16 @@ contract Wojak is ERC20, AccessControl {
     function burnForMeEverything() public {
         _burn(msg.sender, balanceOf(msg.sender));
     }
+
+    function activateTreasurySellMinting() public onlyRole(TREASURY_ROLE) {
+        treasuryMint = true;
+    }
+
+    function deactivateTreasurySellMinting() public onlyRole(TREASURY_ROLE) {
+        treasuryMint = false;
+    }
+}
+
+interface Treasury {
+    function treasurySize() view external returns (uint256);
 }

@@ -7,15 +7,12 @@ pragma solidity ^0.8.0;
  * _mint here should be removed here permenanetly
  * The function takes rewards from the [token] contract and splits it among stakers proportionally
  *
- *
- *
- *
- *
 **/
 
 import "./@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "./@openzeppelin/contracts/access/AccessControl.sol";
+import "./@openzeppelin/contracts/utils/SafeERC20.sol";
 
 abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
     uint8 internal days_passed = 0;
@@ -24,11 +21,15 @@ abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
     address[] internal stakeholders;
 
     Wojak internal tokenAddress = Wojak(address(0));
+    Wojak internal bondAddress = Wojak(address(0));
 
     uint internal TotalStaked = 0;
     uint internal lastTotalRewardsFetchAmount = 0;
     uint internal lastStakingRewardsTimestamp = block.timestamp;
     uint internal lastStakingRewards = 0;
+    uint private lastBlockNum = 0;
+
+    bool lock = false;
 
     constructor(address WojakTokenAddress) ERC20("Boomer", "BMR") {
         _mint(msg.sender, 500 * 10 ** decimals());
@@ -40,6 +41,9 @@ abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
     // ---------- STAKES ----------
 
     function Stake(uint amount) public {
+        require(lock == false, "Try again later");
+        lastBlockNum = block.number;
+
         // We transfer his tokens to the smart contract, its now in its posession
         require(tokenAddress.transferFrom(msg.sender, address(this), amount), "Unable to stake");
         // We can now mint, a dangerous function to our economy :o
@@ -110,6 +114,10 @@ abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
 
     // Distribute once per 24 hours
     function distributeRewards() public {
+        require(lastBlockNum != block.number, "!");
+        lock = true;
+        lastBlockNum = block.number;
+
         require((lastStakingRewardsTimestamp - block.timestamp) > 86400, "Staking rewards are distributed only once per 24 hours");
         // Set immediately the new timestamp
         lastStakingRewardsTimestamp = lastStakingRewardsTimestamp + 86400;
@@ -154,9 +162,13 @@ abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
             lastSupply = newSupply;
             days_passed = 0;
         }
+        
+        bondAddress.updateTokenPriceAtStaking();
 
         // Reward the one who launched this function with 1 WJK
         tokenAddress.transfer(msg.sender, 1 ** 18);
+
+        lock = false;
     }
     
     function getLastStakingRewardsTimestamp() public view returns (uint) {
@@ -171,8 +183,12 @@ abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
         return TotalStaked;
     }
 
-    function setWojakTokenAddress(address newWojakTokenAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        tokenAddress = Wojak(newWojakTokenAddress);
+    function updateTokenAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        tokenAddress = Wojak(newAddress);
+    }
+
+    function updateBondAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        bondAddress = Wojak(newAddress);
     }
 }
 
@@ -197,4 +213,6 @@ interface Wojak {
     function setLiquidityFee(uint256 fee) external;
     function setTreasuryFee(uint256 fee) external;
     function setBurningFee(uint256 fee) external;
+
+    function updateTokenPriceAtStaking() external;
 }

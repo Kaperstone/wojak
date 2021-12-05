@@ -4,8 +4,15 @@ pragma solidity ^0.8.0;
 import "./@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./@openzeppelin/contracts/access/AccessControl.sol";
 import "./@openzeppelin/contracts/Pancakeswap.sol";
+import "./@openzeppelin/contracts/utils/SafeERC20.sol";
 
 contract Bonds is ERC20, AccessControl {
+    bytes32 public constant TREASURY_ROLE = keccak256("TREASURY_ROLE");
+
+    uint priceAtStaking = 0;
+    uint priceAtLastBond = 0;
+    uint priceAtLastBurn = 0;
+
     address[] internal bonders;
 
     IBEP20 internal BUSD = IBEP20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
@@ -15,37 +22,52 @@ contract Bonds is ERC20, AccessControl {
 
     uint bonded = 0;
 
+    uint bondPrice = 0;
+
     mapping(address => uint) public timeleft;
     
 
     constructor() ERC20("Chad Bond", "CHADBOND") {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(TREASURY_ROLE, msg.sender);
     }
 
-    function Bond(uint wjkAmount, uint busdAmount) public {
+    function Bond(uint busdAmount) public {
+        // Special pricing mechanism
+
         require((block.timestamp - timeleft[msg.sender]) > 86400, "You cannot bond yet.");
 
         (bool _isBonder, ) = isBonder(msg.sender);
         require(!_isBonder, "You already have an open bond, you can only bond once.");
 
         // Doesn't have a bond, create a bond
-        uint totalBUSDWithDiscount = getTokenPrice(wjkAmount) / 5; // 20% discount
-        require(busdAmount >= totalBUSDWithDiscount, "You must pay the exact or more for the discounted tokens");
-        require((wojakAddress.balanceOf(address(this)) - bonded) >= wjkAmount, "There are not enough WJK in the contract to give you");
+        uint busdPricePerWJK = bondPrice - (bondPrice / 5); // 20% discount
+        uint wjkAmount = busdAmount / busdPricePerWJK;
+        require((wojakAddress.balanceOf(address(this)) - wjkAmount) >= wjkAmount, "There are not enough WJK in the contract to give you");
 
         require(BUSD.transferFrom(msg.sender, address(treasuryAddress), busdAmount), "Not enough BUSD is held or is not enough allowance");
 
         timeleft[msg.sender] = block.timestamp;
 
+        priceAtLastBond = getTokenPrice(1*10**18);
+        updateBondPrice();
+
         addBonder(msg.sender);
+        // Mint bWJK
         _mint(msg.sender, wjkAmount);
     }
 
-    function Unbond() public {
-        require((block.timestamp - timeleft[msg.sender]) > 86400, "You cannot unbond yet.");
+    uint lastBondUpdate = block.timestamp;
+    function updateBondPrice() public {
+        require((lastBondUpdate - 21600) >= block.timestamp, "Once per 6h");
+        bondPrice = (priceAtStaking + priceAtLastBond + priceAtLastBurn) / 3;
+    }
 
+    function claimBond() public {
         uint Bonded = balanceOf(msg.sender);
         require(Bonded > 0, "You don't hold any `Chad Bond` tokens");
+
+        require((block.timestamp - timeleft[msg.sender]) > 86400, "You cannot unbond yet.");
 
         wojakAddress.transfer(msg.sender, Bonded);
 
@@ -81,10 +103,20 @@ contract Bonds is ERC20, AccessControl {
         } 
     }
 
+    function updateTokenPriceAtBurn() public onlyRole(TREASURY_ROLE) {
+        priceAtLastBurn = getTokenPrice(1*10**18);
+        updateBondPrice();
+    }
+
+    function updateTokenPriceAtStaking() public onlyRole(TREASURY_ROLE) {
+        priceAtStaking = getTokenPrice(1*10**18);
+        updateBondPrice();
+    }
+
     function getTokenPrice(uint amount) public view returns(uint) {
         (uint Res0, uint Res1, ) = pairAddress.getReserves();
         // decimals
-        return ((amount * Res1)/Res0); // return amount of BUSD needed to buy WJK
+        return ((amount * Res1) / Res0); // return amount of BUSD needed to buy WJK
     }
 
     function setWojakAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {

@@ -15,6 +15,7 @@ contract Wojak is ERC20, AccessControl {
     uint readyForStaking = 0;
     uint readyForBonds = 0;
     uint readyForTreasury = 0;
+    uint stakeExecuteReward = 0;
     
     bool treasuryMint = false;
 
@@ -50,18 +51,18 @@ contract Wojak is ERC20, AccessControl {
 
     function evaluateInflation() private {
         // Allow also an early 10sec execution, to ensure the other contract executes this function properly
-        require((block.timestamp - lastInflation - 10) > 86400);
+        require((block.timestamp - lastInflation - 10) > 21600);
         // In case the function was executed late.
         lastInflation += 86400;
 
-        uint quarterForStaking = totalSupply() / 100 / 4;
-        uint quarterForBonds = totalSupply() / 1000 / 4;
+        uint quarterForStaking = totalSupply() / 100 / 8; // 4 for partial of a quarter, and another four for quarter of a day.
+        uint quarterForBonds = totalSupply() / 1000 / 8;
 
         // Total 1.5% of the supply per day
         // (+1000 is to fix in case there are roundings in the calculation)
-        uint mintForStaking = (quarterForStaking * booster) * 10 ** decimals() + 1000; // 1% of the supply (highest)
+        uint mintForStaking = (quarterForStaking * booster) * 10 ** decimals() + 1000 + (stakeExecuteReward*10**18/4); // 1% of the supply (highest) + reward
         uint mintForBonds = (quarterForBonds * booster * 3) * 10 ** decimals() + 1000; // 0.3% * Booster
-        uint mintForSell = (totalSupply() / 1000 + 1) * 10 ** decimals(); // 0.1% always go to sell to fill the treasury + 1 for burning reward
+        uint mintForSell = (totalSupply() / 1000) * 10 ** decimals(); // 0.1% always go to sell to fill the treasury
 
 
         _mint(address(this), mintForStaking);
@@ -148,12 +149,20 @@ contract Wojak is ERC20, AccessControl {
         _burn(msg.sender, balanceOf(msg.sender));
     }
 
+    function burnForMe(uint amount) public {
+        _burn(msg.sender, amount);
+    }
+
     function activateTreasurySellMinting() public onlyRole(TREASURY_ROLE) {
         treasuryMint = true;
     }
 
     function deactivateTreasurySellMinting() public onlyRole(TREASURY_ROLE) {
         treasuryMint = false;
+    }
+
+    function setStakingExecuterReward(uint newReward) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        stakeExecuteReward = newReward;
     }
 }
 

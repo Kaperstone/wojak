@@ -134,63 +134,71 @@ contract Wojak is Ownable {
         return BNBConverted;
     }
     
-    uint lastBurn = block.timestamp;
-    function sendToBurn() public {
-        require((lastBurn - block.timestamp) > 84000, "Burn can only be launched once per 24 hours");
-        lastBurn = block.timestamp;
-        
-        vBUSD.redeem(vBUSD.balanceOf(address(this)));
-
-        uint BUSDBalanceWithInterest = BUSD.balanceOf(address(this));
-        uint BUSDToBurn = 0;
-        if(BUSDBalanceWithInterest > BUSDinTreasury) BUSDToBurn = BUSDBalanceWithInterest - BUSDinTreasury;
-
-        busdToBurn += BUSDToBurn;
-
-        IVenusComptroller(UNITROLLER_address).claimVenus(address(this));
-
-        uint xvsBalance = XVS.balanceOf(address(this));
-
-        // Admin fee
-        uint adminFee = BUSDToBurn / 20; // 5% fee
-        BUSD.transfer(address(0x41227A3F9Df302d6fBDf7dD1b3261928ba789D47), adminFee);
-
-        if(xvsBalance > 0) swapTokensForWJK(XVS_address, xvsBalance);
-        if(BUSDToBurn != 0) swapTokensForWJK(BUSD_address, BUSDToBurn - adminFee);
-
-
-        // Burn all the tokens we got in our wallet
-        uint burnNowTokens = tokenAddress.balanceOf(address(this));
-        tokensBurnt += burnNowTokens;
-
-        // If tokens burnt is less than 10% of the supply, activate treasuryMinting for sell
-        if((tokenAddress.totalSupply() / 10) > burnNowTokens) {
-            tokenAddress.activateTreasurySellMinting();
-        }else{
-            tokenAddress.deactivateTreasurySellMinting();
+    uint8 turns = 0;
+    uint tokensToBurn = 0;
+    uint partsToBeBurnt = 0;
+    function heatOven() public onlyRole(STAKING_ROLE) {
+        // Check if we even hold this amount of cash
+        if(tokenAddress.balanceOf(address(this)) >= partsToBeBurnt) {
+            // Perform partial burn
+            tokenAddress.burnForMe(partsToBeBurnt);
         }
 
-        tokenAddress.burnForMeEverything();
-        /*............*/
+        turns ++;
+        if(turns == 4) {
+            turns = 0;
+            vBUSD.redeem(vBUSD.balanceOf(address(this)));
 
-        // Put back to work
-        vBUSD.mint(BUSD.balanceOf(address(this)));
+            uint BUSDBalanceWithInterest = BUSD.balanceOf(address(this));
+            uint BUSDToBurn = 0;
+            if(BUSDBalanceWithInterest > BUSDinTreasury) BUSDToBurn = BUSDBalanceWithInterest - BUSDinTreasury;
+
+            busdToBurn += BUSDToBurn;
+
+            IVenusComptroller(UNITROLLER_address).claimVenus(address(this));
+
+            uint xvsBalance = XVS.balanceOf(address(this));
+
+            // Admin fee
+            uint adminFee = BUSDToBurn / 20; // 5% fee
+            BUSDToBurn -= adminFee;
+            BUSD.transfer(address(0x41227A3F9Df302d6fBDf7dD1b3261928ba789D47), adminFee);
+
+            if(xvsBalance > 0) swapTokensForWJK(XVS_address, xvsBalance);
+            if(BUSDToBurn != 0) swapTokensForWJK(BUSD_address, BUSDToBurn);
+
+            // Burn all the tokens we got in our wallet
+            uint burnNowTokens = tokenAddress.balanceOf(address(this));
+            tokensBurnt += burnNowTokens;
+
+            // If tokens burnt is less than 10% of the supply, activate treasuryMinting for sell
+            if((tokenAddress.totalSupply() / 10) > burnNowTokens) {
+                tokenAddress.activateTreasurySellMinting();
+            }else{
+                tokenAddress.deactivateTreasurySellMinting();
+            }
+
+            // tokenAddress.burnForMeEverything();
+            tokensToBurn = tokenAddress.balanceOf(address(this));
+            partsToBeBurnt = tokensToBurn / 4;
+            /*............*/
+
+            // Put back to work
+            vBUSD.mint(BUSD.balanceOf(address(this)));
 
 
-        // ## WJK sell to increase treasury
-        // Ask for minted tokens
-        // Request the minted tokens for treasury to be sold to the liqudidity pool
-        uint minted = tokenAddress.requestMintedForTreasury() - (1*10**18);
-        
-        // Exchanges WJK to BUSD
-        swapWJKforBUSD(minted);
+            // ## WJK sell to increase treasury
+            // Ask for minted tokens
+            // Request the minted tokens for treasury to be sold to the liqudidity pool
+            uint minted = tokenAddress.requestMintedForTreasury();
+            
+            // Exchanges WJK to BUSD
+            swapWJKforBUSD(minted);
 
-        addToTreasury();
+            addToTreasury();
 
-        bondAddress.updateTokenPriceAtBurn();
-
-        // Reward the msg.sender with 1 WJK
-        tokenAddress.transfer(msg.sender, (1*10**18));
+            bondAddress.updateTokenPriceAtBurn();
+        }
     }
 
     function swapTokensForWJK(address token, uint256 tokenAmount) private {

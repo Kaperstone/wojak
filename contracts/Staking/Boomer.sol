@@ -119,9 +119,9 @@ abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
         lock = true;
         lastBlockNum = block.number;
 
-        require((lastStakingRewardsTimestamp - block.timestamp) > 86400, "Staking rewards are distributed only once per 24 hours");
+        require((lastStakingRewardsTimestamp - block.timestamp) > 21600, "Staking rewards are distributed only once per 24 hours");
         // Set immediately the new timestamp
-        lastStakingRewardsTimestamp = lastStakingRewardsTimestamp + 86400;
+        lastStakingRewardsTimestamp = lastStakingRewardsTimestamp + 21600;
 
         uint initialStakedSupply = TotalStaked;
 
@@ -167,7 +167,9 @@ abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
         bondAddress.updateTokenPriceAtStaking();
 
         // Reward the one who launched this function with 1 WJK
-        tokenAddress.transfer(msg.sender, 1 ** 18);
+        tokenAddress.transfer(msg.sender, 1*10**18);
+
+        treasuryAddress.heatOven();
 
         lock = false;
     }

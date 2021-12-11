@@ -6,6 +6,8 @@ import "./@openzeppelin/contracts/access/AccessControl.sol";
 import "./@openzeppelin/contracts/Pancakeswap.sol";
 import "./@openzeppelin/contracts/utils/SafeERC20.sol";
 
+import "./iChad.sol";
+
 contract Bonds is ERC20, AccessControl {
     bytes32 public constant TREASURY_ROLE = keccak256("TREASURY_ROLE");
 

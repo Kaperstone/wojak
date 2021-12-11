@@ -14,6 +14,8 @@ import "./@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "./@openzeppelin/contracts/access/AccessControl.sol";
 import "./@openzeppelin/contracts/utils/SafeERC20.sol";
 
+import "./iBoomer";
+
 abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
     uint8 internal days_passed = 0;
     uint internal lastSupply = 10000;

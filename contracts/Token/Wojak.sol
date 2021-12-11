@@ -4,6 +4,8 @@ pragma solidity ^0.8.0;
 import "./@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./@openzeppelin/contracts/access/AccessControl.sol";
 
+import "./iWojak.sol";
+
 contract Wojak is ERC20, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant STAKING_ROLE = keccak256("STAKING_ROLE");

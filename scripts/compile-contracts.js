@@ -131,7 +131,11 @@ async function main() {
   await Staking.deployed();
   console.log("Staking deployed to:", Staking.address);
 
-  const Treasury = await hre.ethers.getContractFactory("Treasury/main.sol").deploy();
+  const Treasury = await hre.ethers.getContractFactory("Treasury/Bunker.sol").deploy();
+  await Treasury.deployed();
+  console.log("Treasury deployed to:", Treasury.address);
+
+  const Treasury = await hre.ethers.getContractFactory("Bridge/GoldenRog.sol").deploy();
   await Treasury.deployed();
   console.log("Treasury deployed to:", Treasury.address);
 

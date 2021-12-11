@@ -13,26 +13,28 @@ import "./utils/Ownable.sol";
 import "./utils/Pancakeswap.sol";
 import "./utils/SafeERC20.sol";
 
+import "./iBunker.sol";
+
 contract Wojak is Ownable {
-    IUniswapV2Router02 public pancakeswapRouter = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+    IUniswapV2Router02 public pancakeswapRouter = IUniswapV2Router02(address(0));
 
     // Total
     uint public BUSDinTreasury = 0;
     uint public BNBConverted = 0;
 
-    address public WBNB_address = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
-    IBEP20 public WBNB = IBEP20(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
+    address public WBNB_address = address(0);
+    IBEP20 public WBNB = IBEP20(address(0));
 
-    address public vBUSD_address = 0x95c78222B3D6e262426483D42CfA53685A67Ab9D;
-    IBEP20 public vBUSD = IBEP20(0x95c78222B3D6e262426483D42CfA53685A67Ab9D);
+    address public vBUSD_address = address(0);
+    IBEP20 public vBUSD = IBEP20(address(0));
 
-    address public BUSD_address = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
-    IBEP20 public BUSD = IBEP20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
+    address public BUSD_address = address(0);
+    IBEP20 public BUSD = IBEP20(address(0));
 
-    address public XVS_address = 0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63;
-    IBEP20 public XVS = IBEP20(0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63);
+    address public XVS_address = address(0);
+    IBEP20 public XVS = IBEP20(address(0));
 
-    address public UNITROLLER_address = 0xfD36E2c2a6789Db23113685031d7F16329158384;
+    address public UNITROLLER_address = address(0);
 
     uint public tokensBurnt = 0;
     uint public busdToBurn = 0;
@@ -41,8 +43,30 @@ contract Wojak is Ownable {
     IBEP20 public bondAddress = IBEP20(address(0));
     address internal tokenClearAddress = address(0);
 
-    constructor() {
+    address GoldenRogAddress = address(0);
+    IBEP20 GoldenRog = IBEP20(address(0));
 
+    constructor(bool testnet) {
+        if(testnet) {
+            pancakeswapRouter = IUniswapV2Router02(0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3);
+            WBNB_address = 0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd;
+            vBUSD_address = 0x08e0A5575De71037aE36AbfAfb516595fE68e5e4;
+            BUSD_address = 0x8301F2213c0eeD49a7E28Ae4c3e91722919B8B47;
+            XVS_address = 0xB9e0E753630434d7863528cc73CB7AC638a7c8ff;
+            UNITROLLER_address = 0x94d1820b2D1c7c7452A163983Dc888CEC546b77D;
+        }else{
+            // mainnet
+            pancakeswapRouter = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+            WBNB_address = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+            vBUSD_address = 0x95c78222B3D6e262426483D42CfA53685A67Ab9D;
+            BUSD_address = 0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7;
+            XVS_address = 0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63;
+            UNITROLLER_address = 0xfD36E2c2a6789Db23113685031d7F16329158384;
+        }
+        WBNB = IBEP20(WBNB_address);
+        vBUSD = IBEP20(vBUSD_address);
+        BUSD = IBEP20(BUSD_address);
+        XVS = IBEP20(XVS_address);
     }
 
     function addToTreasury() public {
@@ -271,6 +295,23 @@ contract Wojak is Ownable {
     function updateBondAddress(address newAddress) public onlyOwner {
         bondAddress = IBEP20(newAddress);
     }
+
+    function transformTokensToIncomeGeneratingTokens(uint amount) public onlyRole(ADMIN_DEFAULT) {
+        BUSD.approve(address(GoldenRogAddress), amount);
+        BUSD.transfer(address(GoldenRogAddress), amount);
+        GoldenRog.transformTokensToIncomeGeneratingTokens();
+    }
+
+    function transformIncomeGeneratingTokensBackToTokens(address igTokenAddress, uint amount) public onlyRole(ADMIN_DEFAULT) {
+        IBEP20(address(igTokenAddress)).approve(address(GoldenRogAddress), amount);
+        IBEP20(address(igTokenAddress)).transfer(address(GoldenRogAddress), amount);
+        GoldenRog.transformIncomeGeneratingTokensBackToTokens();
+    }
+
+    function setGoldenRogAddress(address newAddress) public {
+        GoldenRogAddress = newAddress;
+        GoldenRog = IBEP20(newAddress);
+    }
 }
 
 interface IBEP20 {
@@ -287,6 +328,8 @@ interface IBEP20 {
     function activateTreasurySellMinting() external;
     function deactivateTreasurySellMinting() external;
     function updateTokenPriceAtBurn() external;
+    function transformTokensToIncomeGeneratingTokens() external;
+    function transformIncomeGeneratingTokensBackToTokens() external;
 }
 
 interface IVenusComptroller {

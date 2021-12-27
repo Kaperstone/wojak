@@ -9,8 +9,8 @@ interface iBoomer {
     function calculateReward(address _stakeholder) external;
     function distributeRewards() external;
     function getLastStakingRewardsTimestamp() external;
-    function getLastStakingRewards() external;
-    function getTotalStaked() external; 
+    function getLastDistributedRewards() external;
     function updateTokenAddress(address newAddress) external;
     function updateBondAddress(address newAddress) external;
+    function getIndex() external;
 }

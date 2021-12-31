@@ -84,21 +84,22 @@ contract Bunker is AccessControl, IERC20 {
         uint revenue = Bridge.calculateRevenue();
         Bridge.takeIncome();
 
+        // Check if the keeper has at least 50 $LINK or more
+        if(keeper.linkAmount() <= (50 * 10**18)) {
+            boughtLink = true;
+
+            // Buy LINK for 100 BUSD
+            buyLink(100 * 10**18);
+
+            // Send them to keeper
+            LINK.transfer(address(keeper), LINK.balanceOf(address(this)));
+        }
+
         // Check if we have minimum 10k to spend on burn
         // That should amount about 25mil in locked value in order for this to work with 5% return
         if(revenue > (10000 * 10**18)) {
             bool boughtLink = false;
 
-            // Check if the keeper has at least 10 $LINK or more
-            if(keeper.linkAmount() <= (10 * 10**18)) {
-                boughtLink = true;
-
-                // Buy LINK for 100 BUSD
-                buyLink(100 * 10**18);
-
-                // Send them to keeper
-                LINK.transfer(address(keeper), LINK.balanceOf(address(this)));
-            }
 
             // 
             if(block.timestamp > 172800 && randNum == 5) {
@@ -122,10 +123,12 @@ contract Bunker is AccessControl, IERC20 {
 
     function buyLink(uint busdAmount) private {
         // 
+        
     }
 
     function buyWJK(uint busdAmount) private {
         // 
+
     }
 }
 

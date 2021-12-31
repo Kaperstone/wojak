@@ -18,7 +18,7 @@ contract Bonds is ERC20, AccessControl {
     address[] internal bonders;
 
     IBEP20 public WBNB = IBEP20(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
-    IBEP20 internal BUSD = IBEP20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
+    IBEP20 public BUSD = IBEP20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
     IBEP20 internal wojakAddress = IBEP20(address(0));
     IBEP20 internal treasuryAddress = IBEP20(address(0));
     IUniswapV2Pair internal pairAddress = IUniswapV2Pair(address(0));

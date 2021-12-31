@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts v4.4.1 (token/ERC20/ERC20.sol)
 
 pragma solidity ^0.8.0;
 
 import "./IERC20.sol";
 import "./extensions/IERC20Metadata.sol";
 import "../../utils/Context.sol";
-import "../../utils/Pancakeswap.sol";
 
 /**
  * @dev Implementation of the {IERC20} interface.
@@ -32,31 +32,15 @@ import "../../utils/Pancakeswap.sol";
  * functions have been added to mitigate the well-known issues around setting
  * allowances. See {IERC20-approve}.
  */
-abstract contract ERC20 is Context, IERC20, IERC20Metadata {
-    event SwapAndLiquify(uint256 tokensSwapped, uint256 ethReceived, uint256 tokensIntoLiqudity);
-    
-    bool swapLock = false;
-
-    // Pancakeswap v2
-    IUniswapV2Router02 public pancakeswapRouter = IUniswapV2Router02(address(0));
-
-    address public treasury = address(0);
-
-    // Excluded list
-    address[] internal excluded;
-    
+contract ERC20 is Context, IERC20, IERC20Metadata {
     mapping(address => uint256) private _balances;
+
     mapping(address => mapping(address => uint256)) private _allowances;
 
     uint256 private _totalSupply;
 
     string private _name;
     string private _symbol;
-
-    IERC20 public BUSD = IERC20(address(0));
-    IERC20 public WBNB = IERC20(address(0));
-
-    bool transferringLeftovers = false;
 
     /**
      * @dev Sets the values for {name} and {symbol}.
@@ -67,17 +51,9 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata {
      * All two of these values are immutable: they can only be set once during
      * construction.
      */
-    constructor(string memory name_, string memory symbol_, bool testnet) {
+    constructor(string memory name_, string memory symbol_) {
         _name = name_;
         _symbol = symbol_;
-
-        if(testnet) {
-            BUSD = IERC20(address(0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee));
-            WBNB = IERC20(address(0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd));
-        }else{
-            BUSD = IERC20(address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56));
-            WBNB = IERC20(address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c));
-        }
     }
 
     /**
@@ -137,15 +113,6 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata {
     function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
         _transfer(_msgSender(), recipient, amount);
         return true;
-    }
-
-    /**
-     * @dev Destroys `amount` tokens from the caller.
-     *
-     * See {ERC20-_burn}.
-     */
-    function burn(uint256 amount) public virtual {
-        _burn(_msgSender(), amount);
     }
 
     /**
@@ -250,64 +217,27 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata {
      * - `sender` cannot be the zero address.
      * - `recipient` cannot be the zero address.
      * - `sender` must have a balance of at least `amount`.
-    **/
+     */
     function _transfer(
         address sender,
         address recipient,
-        uint256 brutto
+        uint256 amount
     ) internal virtual {
         require(sender != address(0), "ERC20: transfer from the zero address");
         require(recipient != address(0), "ERC20: transfer to the zero address");
-        _beforeTokenTransfer(sender, recipient, brutto);
+
+        _beforeTokenTransfer(sender, recipient, amount);
 
         uint256 senderBalance = _balances[sender];
-        require(senderBalance >= brutto, "ERC20: transfer amount exceeds balance");
-
-        // When interacting with the treasury, bonds and others are suppose to be excluded
-        (bool senderExcluded, ) = isExcluded(sender);
-        (bool recipientExcluded, ) = isExcluded(recipient);
-        if(senderExcluded || recipientExcluded) {
-            unchecked {
-                _balances[sender] = senderBalance - brutto;
-            }
-            _balances[recipient] += brutto;
-        }else{
-            uint onePercent = brutto / 100;
-
-            uint fee = onePercent * 2;
-
-            // Lets deduct the fees from the initial amount + deduct a burn
-            uint netto = brutto - fee - onePercent;
-            
-            unchecked {
-                _balances[sender] = senderBalance - brutto; // Sender is being deducted by full amount
-                _balances[address(this)] += fee; // Add to the contract's balance
-            }
-
-            // Someone just executed "_approve", it attempts to empty the contract of BNB, WBNB and BUSD tokens
-            if(transferringLeftovers) {
-                // So instead of creating LP or swapping for BUSD to fill the treausry, we just burn the tokens, so the tax don't go to waste
-                netto -= onePercent * 2;
-            }else{
-
-                // Liquidity
-                if(!swapLock) {
-                    swapAndLiquify(onePercent);
-                }else{
-                    // If cannot we cannot exchange currently, then burn
-                    // Otherwise it will be lost to frontrun
-                    netto -= onePercent;
-                }
-                // Treasury tax
-                swapTokensForBUSD(onePercent); // Turn the fee into BUSD
-            }
-
-            _balances[recipient] += netto; // Recipient receives netto (after tax)
-            // We decrease the total supply, because we burnt some
-            _totalSupply -= brutto - netto;
+        require(senderBalance >= amount, "ERC20: transfer amount exceeds balance");
+        unchecked {
+            _balances[sender] = senderBalance - amount;
         }
-        emit Transfer(sender, recipient, brutto);
-        _afterTokenTransfer(sender, recipient, brutto);
+        _balances[recipient] += amount;
+
+        emit Transfer(sender, recipient, amount);
+
+        _afterTokenTransfer(sender, recipient, amount);
     }
 
     /** @dev Creates `amount` tokens and assigns them to `account`, increasing
@@ -423,123 +353,4 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata {
         address to,
         uint256 amount
     ) internal virtual {}
-
-
-    
-    function swapAndLiquify(uint256 contractTokenBalance) private {
-        swapLock = true;
-        uint256 half = contractTokenBalance / 2;
-        uint256 otherHalf = contractTokenBalance - half;
-        uint256 initialBalance = address(this).balance;
-        swapTokensForEth(half); 
-        uint256 newBalance = address(this).balance - initialBalance;
-        addLiquidity(otherHalf, newBalance);
-        emit SwapAndLiquify(half, newBalance, otherHalf);
-        swapLock = false;
-    }
-
-    function swapTokensForEth(uint256 tokenAmount) private {
-        address[] memory path = new address[](2);
-        path[0] = address(this);
-        path[1] = pancakeswapRouter.WETH();
-
-        _approve(address(this), address(pancakeswapRouter), tokenAmount);
-
-        pancakeswapRouter.swapExactTokensForETHSupportingFeeOnTransferTokens(
-            tokenAmount,
-            0, // accept any amount of ETH
-            path,
-            address(this),
-            block.timestamp
-        );
-    }
-
-    function swapTokensForBUSD(uint256 amount) private {
-        address[] memory path = new address[](2);
-        path[0] = address(this);
-        path[1] = address(BUSD);
-
-        _approve(address(this), address(pancakeswapRouter), amount);
-
-        pancakeswapRouter.swapExactTokensForTokensSupportingFeeOnTransferTokens(
-            amount,
-            0, // accept any amount of ETH
-            path,
-            address(treasury),
-            block.timestamp
-        );
-    }
-
-    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
-        _approve(address(this), address(pancakeswapRouter), tokenAmount);
-
-        pancakeswapRouter.addLiquidityETH{value: ethAmount}(
-            address(this),
-            tokenAmount,
-            0, // slippage is unavoidable
-            0, // slippage is unavoidable
-            address(treasury), // Give the LP tokens to the treasury
-            block.timestamp
-        );
-    }
-
-    function isExcluded(address _address) public view returns(bool, uint) {
-        for (uint x = 0; x < excluded.length; x++){
-            if (_address == excluded[x]) return (true, x);
-        }
-        return (false, 0);
-    }
-
-    function _addExcluded(address excludeAddress) internal {
-        (bool _isExcluded, ) = isExcluded(excludeAddress);
-        if(!_isExcluded) excluded.push(excludeAddress);
-    }
-
-    function _removeExcluded(address excludeAddress) internal {
-        (bool _isExcluded, uint x) = isExcluded(excludeAddress);
-        if(_isExcluded) {
-            excluded[x] = excluded[excluded.length - 1];
-            excluded.pop();
-        } 
-    }
-
-    function _setRouterAddress(address newAddress) internal {
-        pancakeswapRouter = IUniswapV2Router02(newAddress);
-    }
-    
-    function _setTreasuryAddress(address newAddress) internal {
-        treasury = address(newAddress);
-    }
-
-    function _setBUSDAddress(address newAddress) internal {
-        BUSD = IERC20(address(newAddress));
-    }
-
-    function _setWBNBAddress(address newAddress) internal {
-        BUSD = IERC20(address(newAddress));
-    }
-
-    uint lastTransferLeftovers = block.timestamp;
-    function TransferLeftovers() public {
-        // Because I know people might abuse the shit out of this function :facepalm:
-        require(block.timestamp - lastTransferLeftovers > 604800, "!toosoon");
-        lastTransferLeftovers = block.timestamp;
-        // We need to lock all the LP and Treasury tax, so we don't accidently distrupt an attempt to add LP
-        transferringLeftovers = true;
-        // Empty the contract of BNB, WBNB and BUSD
-        if(address(this).balance > 0) {
-            address(treasury).call{ value: address(this).balance };
-        }
-
-        if(BUSD.balanceOf(address(this)) > 0) {
-            BUSD.transfer(address(treasury), BUSD.balanceOf(address(this)));
-        }
-
-        if(WBNB.balanceOf(address(this)) > 0) {
-            WBNB.transfer(address(treasury), WBNB.balanceOf(address(this)));
-        }
-        transferringLeftovers = false;
-    }
 }
-
-

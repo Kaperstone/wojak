@@ -41,6 +41,8 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
     function swapExactTokensForETHSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external;
 }
 
+pragma solidity >=0.5.0;
+
 interface IUniswapV2Pair {
     event Approval(address indexed owner, address indexed spender, uint value);
     event Transfer(address indexed from, address indexed to, uint value);

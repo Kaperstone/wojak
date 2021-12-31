@@ -5,12 +5,7 @@ See
 scripts>compile-contracts.js
 ```
 ## TODO
-Create InvestmentBridge contract for Bunker
-Create an array for which tokens to tokens to burn
-Treasury
-    > Create function to transform ib tokens to tokens (stopGeneratingIncome)
-    > startGeneratingIncome
-    > setGoldenRogAddress
+Make @openzeppelin a global folder that you need to only import
 Events/emit
 Create interface files
 Add to the compile file - automatically set the token addresses (testnet/mainnet)

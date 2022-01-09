@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.6;
 
 interface ENSInterface {
   // Logged when the owner of a node assigns a new owner to a subnode.

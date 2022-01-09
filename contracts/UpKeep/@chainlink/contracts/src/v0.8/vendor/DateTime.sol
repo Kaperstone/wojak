@@ -2,7 +2,7 @@
 
 // sourced from https://github.com/pipermerriam/ethereum-datetime
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.6;
 
 library DateTime {
   /*

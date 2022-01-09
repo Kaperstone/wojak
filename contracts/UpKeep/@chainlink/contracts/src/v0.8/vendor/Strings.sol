@@ -36,7 +36,7 @@
  *      corresponding to the left and right parts of the string.
  */
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.6;
 
 library strings {
   struct slice {

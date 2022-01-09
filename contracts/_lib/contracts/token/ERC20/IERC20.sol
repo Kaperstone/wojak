@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts v4.4.1 (token/ERC20/IERC20.sol)
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.6;
 
 /**
  * @dev Interface of the ERC20 standard as defined in the EIP.
@@ -78,9 +79,7 @@ interface IERC20 {
      * a call to {approve}. `value` is the new allowance.
      */
     event Approval(address indexed owner, address indexed spender, uint256 value);
-    
-    function isExcluded(address _address) external returns(bool, uint);
-    function getLiquidityFee() external returns(uint256);
-    function getTreasuryFee() external returns(uint256);
-    function getBurningFee() external returns(uint256);
+
+    function mint(address to, uint256 amount) external;
+    function burn(uint amount) external;
 }

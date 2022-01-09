@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.2;
+pragma solidity 0.8.6;
 
-interface iBoomer {
-    
-    function Stake(uint amount) external;
-    function Unstake(uint amount) external;
-    function isStakeholder(address _address) external;
-    function calculateReward(address _stakeholder) external;
+import "../_lib/contracts/token/ERC20/IERC20.sol";
+
+interface IBoomer is IERC20 {
+    function Stake(uint wjkAmount) external returns (uint256);
+    function Unstake(uint amount) external returns (uint256);
+    function stakerBalance(address _stakeholder) external view returns (uint256);
     function distributeRewards() external;
-    function getLastStakingRewardsTimestamp() external;
-    function getLastDistributedRewards() external;
-    function updateTokenAddress(address newAddress) external;
-    function updateBondAddress(address newAddress) external;
-    function getIndex() external;
+    function setFillAmount(uint amount) external;
 }

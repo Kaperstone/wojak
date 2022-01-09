@@ -1,103 +1,70 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.6;
 
-/**
- *
- * Staking
- * _mint here should be removed here permenanetly
- * The function takes rewards from the [token] contract and splits it among stakers proportionally
- *
-**/
+import "./../_lib/contracts/token/ERC20/ERC20.sol";
+import "./../_lib/contracts/utils/SafeERC20.sol";
 
-import "./@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "./@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
-import "./@openzeppelin/contracts/access/AccessControl.sol";
-import "./@openzeppelin/contracts/utils/SafeERC20.sol";
-import "./@openzeppelin/contracts/utils/Pancakeswap.sol";
+import "../_lib/Common.sol";
 
-import "./iBoomer.sol";
+abstract contract Boomer is Common, ERC20 {
+    using SafeERC20 for IERC20;
 
-abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
-    event SwapAndLiquify(uint256 tokensSwapped, uint256 ethReceived, uint256 tokensIntoLiqudity);
-
-    // Array to collect all the stakeholders addresses
-    address[] internal stakeholders;
+    // Array to collect all the stakeholders locks
     mapping(address => uint256) public stakeLock; 
-
-    // Shorthands for calls
-    IBEP20 public token = IBEP20(address(0));
-    IBEP20 public bond = IBEP20(address(0));
-    IBEP20 public treasury = IBEP20(address(0));
-
+    // Last staking
     uint public lastStakingRewardsTimestamp = block.timestamp;
-    uint public lastDistributedRewards = 0;
+    // WJK balance as an array
+    uint private wjkBalance = 0;
+
+    // Administration
+    uint public fillAmount = 1;
+
+    // Statistics
     uint public totalRewards = 0;
+    uint public busdCollectedForTreasury = 0;
 
-    uint fillAmount = 1;
-
-    // Pancakeswap v2
-    IUniswapV2Router02 public pancakeswapRouter = IUniswapV2Router02(address(0));
-
-    constructor() ERC20("Boomer", "BMR") {
-        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
-    }
+    constructor(bool testnet) ERC20("Boomer Staking", "BOOMER") Common(testnet) {}
 
     // ---------- STAKES ----------
 
-    function Stake(uint amount) public {
+    function Stake(uint wjkAmount) public returns (uint256) {
         // We transfer his tokens to the smart contract, its now in its posession
-        require(token.transferFrom(msg.sender, address(this), amount), "Unable to stake");
+        WJK.safeTransferFrom(msg.sender, address(this), wjkAmount);
+        
+        uint boomerAmount = wjkAmount / (_totalSupply / wjkBalance);
+        wjkBalance += wjkAmount;
+
         // We can now mint, a dangerous function to our economy :o
-        _mint(msg.sender, amount); // Mint Boomer tokens to his account
+        _mint(msg.sender, boomerAmount); // Mint Boomer tokens to his account
+
         stakeLock[msg.sender] = block.timestamp + 86400;
-        // If its a new address, welcome to the staking pool
-        if(balanceOf(msg.sender) == 0) addStakeholder(msg.sender); // New unique staker account
+
+        return boomerAmount;
     }
 
-    function Unstake(uint amount) public {
+    function Unstake(uint amount) public returns(uint256) {
         require(block.timestamp > stakeLock[msg.sender], "You cannot unstake yet, 24 hours must pass since last stake-in");
         uint amountHave = balanceOf(msg.sender);
         // He requests back more than he can
-        require(amount > amountHave, "No tokens to unstake");
+        require(amount >= amountHave, "No tokens to unstake");
 
         // We burn his Boomers
-        _burn(msg.sender, amountHave);
+        _burn(msg.sender, amount);
+        uint wjkToSend = stakerBalance(msg.sender);
+        wjkBalance -= wjkToSend;
 
         // Give him his tokens from this contract
-        token.transfer(msg.sender, amountHave);
-        
-        // Remove him from the array if he holds 0 tokens
-        if(balanceOf(msg.sender) == 0) removeStakeholder(msg.sender);
-    }
+        WJK.safeTransfer(msg.sender, wjkToSend);
 
-    // ---------- STAKEHOLDERS ----------
-
-    function isStakeholder(address _address) public view returns(bool, uint) {
-        for (uint x = 0; x < stakeholders.length; x++){
-            if (_address == stakeholders[x]) return (true, x);
-        }
-        return (false, 0);
-    }
-
-    function addStakeholder(address _stakeholder) internal {
-        (bool _isStakeholder, ) = isStakeholder(_stakeholder);
-        if(!_isStakeholder) stakeholders.push(_stakeholder);
-    }
-
-    function removeStakeholder(address _stakeholder) internal {
-        (bool _isStakeholder, uint x) = isStakeholder(_stakeholder);
-        if(_isStakeholder) {
-            stakeholders[x] = stakeholders[stakeholders.length - 1];
-            stakeholders.pop();
-        } 
+        return wjkToSend;
     }
 
     // ---------- REWARDS ----------
 
     // Externally it can be used for `Next reward yield`
-    function calculateReward(address _stakeholder) public view returns (uint) {
-        // New model is to give 0.25% of what he is holding
-        return balanceOf(_stakeholder) / 400;
+    function stakerBalance(address _stakeholder) public view returns (uint256) {
+        // New model is to give 0.125% of what he is holding
+        return balanceOf(_stakeholder) * (_totalSupply / wjkBalance);
         // It is also auto-compounding :)
     }
 
@@ -107,96 +74,34 @@ abstract contract Boomer is ERC20, ERC20Burnable, AccessControl {
         // Set immediately the new timestamp
         lastStakingRewardsTimestamp = lastStakingRewardsTimestamp + 21600;
 
-        uint lTotalRewards = 0;
-        for(uint x = 0; x < stakeholders.length; x++) {
-            uint Reward = calculateReward(stakeholders[x]);
-            lTotalRewards += Reward;
-            _mint(msg.sender, Reward * 10**18);
-        }
+        uint lTotalRewards = wjkBalance + (wjkBalance / 800); // We just raise the amount of wjk contract holds
 
-        // In one run
-        token.mint(address(this), lTotalRewards * 10**18);
+        // Mint to the contract
+        WJK.mint(address(this), lTotalRewards);
 
         // For statistics
-        lastDistributedRewards = lTotalRewards;
         totalRewards += lTotalRewards;
         
-        // For bond average price
-        bond.updateTokenPriceAtStaking();
-
-        // This is the place to automate the usage of this, because nobody else would do
-        treasury.addToTreasury();
-        
-        // We need to get that treasury grow!
+        // We grow the treasury a little bit
         if(fillAmount > 0) {
             // Mint some tokens to fill the treasury
-            token.mint(address(this), fillAmount * 2 * 10**18);
+            WJK.mint(address(this), fillAmount * 2);
 
             // Sell half to get BUSD
-            swapTokensForBUSD(fillAmount * 10**18);
+            busdCollectedForTreasury += swap(address(WJK), address(WJK), fillAmount, address(treasury));
             // Send the BUSD to treasury
 
-            swapAndLiquify(fillAmount / 2);
+            swapAndLiquify(fillAmount);
         }
     }
 
     function setFillAmount(uint amount) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        fillAmount = amount;
+        fillAmount = amount * 10**18;
     }
 
-    function setTokenAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        token = IBEP20(newAddress);
-    }
-
-    function setBondAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        bond = IBEP20(newAddress);
-    }
-
-    function setTreasuryAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        treasury = IBEP20(newAddress);
-    }
-    
-    function setRouterAddress(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        pancakeswapRouter = IUniswapV2Router02(newAddress);
-    }
-
-    function swapAndLiquify(uint256 contractTokenBalance) private {
-        uint256 half = contractTokenBalance.div(2);
-        uint256 otherHalf = contractTokenBalance.sub(half);
-        uint256 initialBalance = address(this).balance;
-        swapTokensForEth(half); 
-        uint256 newBalance = address(this).balance.sub(initialBalance);
-        addLiquidity(otherHalf, newBalance);
-        emit SwapAndLiquify(half, newBalance, otherHalf);
-    }
-
-    function swapTokensForEth(uint256 tokenAmount) private {
-        address[] memory path = new address[](2);
-        path[0] = address(this);
-        path[1] = pancakeswapRouter.WETH();
-
-        token.approve(address(pancakeswapRouter), tokenAmount);
-
-        pancakeswapRouter.swapExactTokensForETHSupportingFeeOnTransferTokens(
-            tokenAmount,
-            0, // accept any amount of ETH
-            path,
-            address(this),
-            block.timestamp
-        );
-    }
-
-    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
-        token.approve(address(pancakeswapRouter), tokenAmount);
-
-        pancakeswapRouter.addLiquidityETH{value: ethAmount}(
-            address(this),
-            tokenAmount,
-            0, // slippage is unavoidable
-            0, // slippage is unavoidable
-            address(treasury), // Give the LP tokens to the treasury
-            block.timestamp
-        );
+    function burn(uint amount) public override virtual {
+        _burn(msg.sender, amount);
+        WJK.burn(amount);
     }
 }
 

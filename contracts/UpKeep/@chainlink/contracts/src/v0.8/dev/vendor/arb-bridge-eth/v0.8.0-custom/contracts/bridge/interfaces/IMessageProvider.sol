@@ -17,7 +17,7 @@
  */
 
 // NOTICE: pragma change from original (^0.6.11)
-pragma solidity ^0.8.0;
+pragma solidity 0.8.6;
 
 interface IMessageProvider {
   event InboxMessageDelivered(uint256 indexed messageNum, bytes data);

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.6;
+pragma solidity ^0.8.0;
 
 // This is the upkeep contract, it ensures that everything in every contract is running smoothly, including launching timers
 // This contract is executed at least once per block (15sec)
 
-import "./@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
-import "./@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
+import "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
+import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
 
-import "../_lib/Common.sol";
+import "../Common.sol";
 
 contract Counter is Common, IKeeper, KeeperCompatibleInterface {
     using SafeERC20 for IERC20;
@@ -16,7 +16,7 @@ contract Counter is Common, IKeeper, KeeperCompatibleInterface {
     uint private lastUpkeep = block.timestamp;
     uint public counter = 0;
 
-    constructor(bool testnet) Common(testnet) {}
+    constructor() Common() {}
 
     function checkUpkeep(bytes calldata /* checkData */) external view override returns (bool upkeepNeeded, bytes memory /* performData */) {
         // Restrict the call to the UpKeeper contract only.
@@ -26,18 +26,19 @@ contract Counter is Common, IKeeper, KeeperCompatibleInterface {
             // We don't use the checkData in this example. The checkData is defined when the Upkeep was registered.
             return (upkeepNeeded, bytes(""));
         }
+        return (false, bytes(""));
     }
 
-    function simpleUpKeepCheck() external view onlyRole(DEFAULT_ADMIN_ROLE) returns (bool upkeepNeeded) {
+    function adminCheckUp() public view override onlyRole(DEFAULT_ADMIN_ROLE) returns (bool upkeepNeeded) {
         // Once per hour
         upkeepNeeded = (block.timestamp - lastUpkeep) > interval;
         // We don't use the checkData in this example. The checkData is defined when the Upkeep was registered.
         return upkeepNeeded;
     }
     
-    uint lastStaking = block.timestamp;
-    uint lastFarming = block.timestamp + 2 * 3600; // Delay by 2 hours
-    uint lastSelfKeep = block.timestamp + 4 * 3600; // Delay by 4 hours
+    uint public lastStaking = block.timestamp;
+    uint public lastFarming = block.timestamp + 2 * 3600; // Delay by 2 hours
+    uint public lastSelfKeep = block.timestamp + 4 * 3600; // Delay by 4 hours
 
     function performUpkeep(bytes calldata /* performData */) external override onlyRole(KEEPER_ROLE) {
         lastUpkeep = block.timestamp;

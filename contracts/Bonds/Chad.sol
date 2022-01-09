@@ -1,33 +1,33 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.6;
+pragma solidity ^0.8.0;
 
-import "../_lib/contracts/token/ERC20/ERC20.sol";
-import "../_lib/contracts/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "../_lib/Common.sol";
+import "../Common.sol";
 
 abstract contract Bonds is Common, ERC20 {
     using SafeERC20 for IERC20;
 
-    uint priceAtStaking = 0;
-    uint priceAtBonding = 0;
-    uint priceAtSelfKeeping = 0;
-    uint priceAtFarming = 0;
+    uint internal priceAtStaking = 0;
+    uint internal priceAtBonding = 0;
+    uint internal priceAtSelfKeeping = 0;
+    uint internal priceAtFarming = 0;
     
-    uint bonded = 0;
-    uint bondPrice = 0;
+    uint public busdBonded = 0;
+    uint public bondPrice = 0;
 
     address[] internal bonders;
     mapping(address => uint) public timeleft;
 
-    constructor(bool testnet) ERC20("Chad Bond", "CHAD") Common(testnet) {}
+    constructor() ERC20("Chad Bond", "CHAD") Common() {}
 
     // For treausry
-    function Bond(uint wjkAmount) public {
+    function bond(uint wjkAmount) public {
         (bool _isBonder, ) = isBonder(msg.sender);
-        require(!_isBonder, "You already have an open bond, you can only bond once.");
+        require(!_isBonder, "!alreadyopen");
 
-        require(WJK.balanceOf(address(this)) >= wjkAmount, "There are not enough WJK in the contract to give you");
+        require(WJK.balanceOf(address(this)) >= wjkAmount, "Not enough WJK in contract");
 
         // Doesn't have a bond, check if he have enough and attempt to transfer BUSD to the smart contract
         uint totalForPayment = wjkAmount * (bondPrice - (bondPrice / 5)); // 20% discount // In BUSD
@@ -35,7 +35,9 @@ abstract contract Bonds is Common, ERC20 {
         require(BUSD.balanceOf(msg.sender) >= totalForPayment, "Insufficient BUSD");
         BUSD.safeTransferFrom(msg.sender, address(keeper), totalForPayment);
 
-        timeleft[msg.sender] = block.timestamp;
+        busdBonded += totalForPayment;
+
+        timeleft[msg.sender] = block.timestamp + 345600;
         addBonder(msg.sender);
 
         updateBondPrice();
@@ -43,21 +45,21 @@ abstract contract Bonds is Common, ERC20 {
         // Mint Chad
         _mint(msg.sender, wjkAmount);
         // Mint equivalent WJK to this contract
-        WJK.mint(address(this), wjkAmount);
+        wojak.mint(address(this), wjkAmount);
         // Put into staking for him, it will automatically start accumulating interest
-        staking.Stake(wjkAmount);
+        staking.stake(wjkAmount);
     }
 
     function claimBond() public {
-        uint Bonded = balanceOf(msg.sender);
-        require(Bonded > 0, "You don't hold any `Chad Bond` tokens");
+        uint bonded = balanceOf(msg.sender);
+        require(bonded > 0, "Not enough bonds");
 
-        require((block.timestamp - timeleft[msg.sender]) >= 86400, "You cannot unbond yet.");
+        require(block.timestamp > timeleft[msg.sender], "You cannot unbond yet.");
 
-        _burn(msg.sender, Bonded);
+        _burn(msg.sender, bonded);
         removeBonder(msg.sender);
 
-        sWJK.safeTransfer(msg.sender, Bonded);
+        sWJK.safeTransfer(msg.sender, bonded);
     }
 
     function attemptRemoveMeAsBonder() public {
@@ -88,14 +90,14 @@ abstract contract Bonds is Common, ERC20 {
         } 
     }
 
-    uint lastBondUpdate = block.timestamp;
+    uint internal lastBondUpdate = block.timestamp;
     function updateBondPrice() internal {
-        if((lastBondUpdate + 21600) <= block.timestamp) {
+        if(block.timestamp > lastBondUpdate) {
             priceAtBonding = getWJKPrice();
             // Average price
             bondPrice = (priceAtStaking + priceAtBonding + priceAtSelfKeeping + priceAtFarming) / 4;
 
-            lastBondUpdate = block.timestamp;
+            lastBondUpdate = block.timestamp + 21600;
         }
     }
 
@@ -115,15 +117,15 @@ abstract contract Bonds is Common, ERC20 {
     }
 
     function getWJKPrice() public view returns(uint) {
-        (uint Res0, uint Res1, ) = pairAddress.getReserves();
+        (uint res0, uint res1, ) = pairAddress.getReserves();
 
-        return 1 * Res1 / Res0; // return amount of BUSD needed to buy WJK
+        return 1 * res1 / res0; // return amount of BUSD needed to buy WJK
     }
 
-    function _transfer(
-        address sender,
-        address recipient,
-        uint256 brutto
+    function _beforeTokenTransfer(
+        address /* from */,
+        address /* to */,
+        uint256 /* amount */
     ) internal virtual override {
         require(false, "!illegal");
     }

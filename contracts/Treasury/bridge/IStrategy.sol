@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.6;
+pragma solidity ^0.8.0;
 
 interface IStrategy {
-    function Get() external;
-    function Invest() external;
+    function deposit() external;
+    function withdraw() external;
 }

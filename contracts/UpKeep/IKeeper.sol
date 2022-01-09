@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.6;
+pragma solidity ^0.8.0;
 
 interface IKeeper {
-    function simpleUpKeepCheck() external view returns (bool upkeepNeeded);
+    function adminCheckUp() external view returns (bool upkeepNeeded);
 }

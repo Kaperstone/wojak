@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.6;
+pragma solidity ^0.8.0;
 
-import "../_lib/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 interface ISoyFarms is IERC20 {
     function deposit(uint busdAmount) external;

@@ -1,20 +1,19 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-describe("Token contract", function () {
-  it("Deployment should assign the total supply of tokens to the owner", async function () {
-    const [owner] = await ethers.getSigners();
+describe("Greeter", function () {
+  it("Should return the new greeting once it's changed", async function () {
+    const Greeter = await ethers.getContractFactory("Greeter");
+    const greeter = await Greeter.deploy("Hello, world!");
+    await greeter.deployed();
 
-    const Token = await ethers.getContractFactory("contracts/Token/Wojak.sol:Wojak");
+    expect(await greeter.greet()).to.equal("Hello, world!");
 
-    const hardhatToken = await Token.deploy();
+    const setGreetingTx = await greeter.setGreeting("Hola, mundo!");
 
-    const ownerBalance = await hardhatToken.balanceOf(owner.address);
+    // wait until the transaction is mined
+    await setGreetingTx.wait();
 
-    expect(await hardhatToken.totalSupply()).to.equal(ownerBalance);
+    expect(await greeter.greet()).to.equal("Hola, mundo!");
   });
-
-  // it("Should wbnb", async function () {
-    // const router = new ethers.Contract(ADDRESS, ABI)
-  // })
 });

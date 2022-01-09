@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.6;
+pragma solidity ^0.8.0;
 
-import "../_lib/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 
-import "../_lib/Common.sol";
+import "../Common.sol";
 
 abstract contract Wojak is Common, ERC20 {
-    using SafeERC20 for IERC20;
 
     // Excluded list
     address[] internal excluded;
 
-    constructor(bool testnet) ERC20("Wojak", "WJK") Common(testnet) {
+    constructor() ERC20("Wojak", "WJK") Common() {
         // Developer tokens
         _mint(msg.sender, 1200 * 10 ** decimals());
     }
@@ -20,52 +20,25 @@ abstract contract Wojak is Common, ERC20 {
         _mint(to, amount);
     }
 
-    function _transfer(address sender, address recipient, uint256 brutto) internal override virtual {
-        require(sender != address(0), "ERC20: transfer from the zero address");
-        require(recipient != address(0), "ERC20: transfer to the zero address");
-        _beforeTokenTransfer(sender, recipient, brutto);
+    function _afterTokenTransfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal override virtual {
 
-        uint256 senderBalance = _balances[sender];
-        require(senderBalance >= brutto, "ERC20: transfer amount exceeds balance");
+        // Check if its not one of our contracts that is trying to transfer
+        (bool senderExcluded, ) = isExcluded(from);
+        (bool recipientExcluded, ) = isExcluded(to);
+        if(!senderExcluded && !recipientExcluded) {
+            uint onePercent = amount / 100;
 
-        // When interacting with the treasury, bonds and others are suppose to be excluded
-        (bool senderExcluded, ) = isExcluded(sender);
-        (bool recipientExcluded, ) = isExcluded(recipient);
-        if(senderExcluded || recipientExcluded) {
-            unchecked {
-                _balances[sender] = senderBalance - brutto;
-            }
-            _balances[recipient] += brutto;
-        }else{
-            uint onePercent = brutto / 100;
+            // Burn 3% off his account
+            _burn(address(to), onePercent * 3);
 
-            // Exclude 1% which goes to burn
-            uint fee = onePercent * 2;
-
-            // Lets deduct the fees from the initial amount + deduct the 1% burn
-            uint netto = brutto - fee - onePercent;
-            
-            unchecked {
-                _balances[sender] = senderBalance - brutto; // Sender is being deducted by full amount
-                _balances[address(this)] += fee; // Add to the contract's balance
-            }
-
-            // Someone just executed donation to the treausry :D
-            // it attempts to empty the contract of BNB, WBNB and BUSD tokens
-            if(transferringLeftovers) {
-                // So instead of creating LP or swapping for BUSD to fill the treausry, we just burn the tokens, so the tax don't go to waste
-                netto -= onePercent * 2;
-            }else{
-                // Send to the Keeper, it will then use this fee to supply itself with enough LINK and fill the liquidity as well as the treasury.
-                swap(address(WJK), address(BUSD), onePercent*2, address(keeper));
-            }
-
-            _balances[recipient] += netto; // Recipient receives netto (after tax)
-            // We decrease the total supply, because we burnt some
-            _totalSupply -= brutto - netto;
+            // Mint 2% to this contract and then sell it
+            _mint(address(this), onePercent * 2);
+            swap(address(WJK), address(BUSD), onePercent*2, address(keeper));
         }
-        emit Transfer(sender, recipient, brutto);
-        _afterTokenTransfer(sender, recipient, brutto);
     }
 
 

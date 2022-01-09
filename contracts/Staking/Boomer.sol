@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.6;
+pragma solidity ^0.8.0;
 
-import "./../_lib/contracts/token/ERC20/ERC20.sol";
-import "./../_lib/contracts/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "../_lib/Common.sol";
+import "../Common.sol";
 
 abstract contract Boomer is Common, ERC20 {
     using SafeERC20 for IERC20;
@@ -23,15 +23,15 @@ abstract contract Boomer is Common, ERC20 {
     uint public totalRewards = 0;
     uint public busdCollectedForTreasury = 0;
 
-    constructor(bool testnet) ERC20("Boomer Staking", "BOOMER") Common(testnet) {}
+    constructor() ERC20("Boomer Staking", "BOOMER") Common() {}
 
     // ---------- STAKES ----------
 
-    function Stake(uint wjkAmount) public returns (uint256) {
+    function stake(uint wjkAmount) public returns (uint256) {
         // We transfer his tokens to the smart contract, its now in its posession
         WJK.safeTransferFrom(msg.sender, address(this), wjkAmount);
         
-        uint boomerAmount = wjkAmount / (_totalSupply / wjkBalance);
+        uint boomerAmount = wjkAmount / (totalSupply() / wjkBalance);
         wjkBalance += wjkAmount;
 
         // We can now mint, a dangerous function to our economy :o
@@ -42,8 +42,8 @@ abstract contract Boomer is Common, ERC20 {
         return boomerAmount;
     }
 
-    function Unstake(uint amount) public returns(uint256) {
-        require(block.timestamp > stakeLock[msg.sender], "You cannot unstake yet, 24 hours must pass since last stake-in");
+    function unstake(uint amount) public returns(uint256) {
+        require(block.timestamp > stakeLock[msg.sender], "!24hr");
         uint amountHave = balanceOf(msg.sender);
         // He requests back more than he can
         require(amount >= amountHave, "No tokens to unstake");
@@ -64,20 +64,20 @@ abstract contract Boomer is Common, ERC20 {
     // Externally it can be used for `Next reward yield`
     function stakerBalance(address _stakeholder) public view returns (uint256) {
         // New model is to give 0.125% of what he is holding
-        return balanceOf(_stakeholder) * (_totalSupply / wjkBalance);
+        return balanceOf(_stakeholder) * (totalSupply() / wjkBalance);
         // It is also auto-compounding :)
     }
 
     // Distribute once per 24 hours
     function distributeRewards() public onlyRole(KEEPER_ROLE) {
-        require((lastStakingRewardsTimestamp - block.timestamp) > 21600, "Staking rewards are distributed only once per 24 hours");
+        require((lastStakingRewardsTimestamp - block.timestamp) > 21600, "!6hr");
         // Set immediately the new timestamp
         lastStakingRewardsTimestamp = lastStakingRewardsTimestamp + 21600;
 
         uint lTotalRewards = wjkBalance + (wjkBalance / 800); // We just raise the amount of wjk contract holds
 
         // Mint to the contract
-        WJK.mint(address(this), lTotalRewards);
+        wojak.mint(address(this), lTotalRewards);
 
         // For statistics
         totalRewards += lTotalRewards;
@@ -85,7 +85,7 @@ abstract contract Boomer is Common, ERC20 {
         // We grow the treasury a little bit
         if(fillAmount > 0) {
             // Mint some tokens to fill the treasury
-            WJK.mint(address(this), fillAmount * 2);
+            wojak.mint(address(this), fillAmount * 2);
 
             // Sell half to get BUSD
             busdCollectedForTreasury += swap(address(WJK), address(WJK), fillAmount, address(treasury));
@@ -97,11 +97,6 @@ abstract contract Boomer is Common, ERC20 {
 
     function setFillAmount(uint amount) public onlyRole(DEFAULT_ADMIN_ROLE) {
         fillAmount = amount * 10**18;
-    }
-
-    function burn(uint amount) public override virtual {
-        _burn(msg.sender, amount);
-        WJK.burn(amount);
     }
 }
 

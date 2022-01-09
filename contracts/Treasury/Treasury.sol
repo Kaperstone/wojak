@@ -1,43 +1,43 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.6;
+pragma solidity ^0.8.0;
 
-import "../_lib/Common.sol";
+import "../Common.sol";
 
 contract Treasury is Common {
     using SafeERC20 for IERC20;
 
-    bool public StayHome = false;
+    bool public stayHome = false;
     // Treasury only holds BUSD
-    uint public BUSDinTreasury = 0;
+    uint public busdInTreasury = 0;
 
-    constructor(bool testnet) Common(testnet) {}
+    constructor() Common() {}
 
     function addToTreasury() public {
         // Increase balance
-        BUSDinTreasury += BUSD.balanceOf(address(this)); 
+        busdInTreasury += BUSD.balanceOf(address(this)); 
 
-        if(!StayHome) {
-            Invest();
+        if(!stayHome) {
+            invest();
         }
     }
 
     // When we want to upgrade the strategy, we withdraw the cash into the treasury.
     function get() public onlyRole(DEFAULT_ADMIN_ROLE) {
-        StayHome = true;
+        stayHome = true;
         // Constant function to interact with
-        tstrat.Get();
+        tstrat.withdraw();
     }
 
     // Exposing as public function
     function put() public onlyRole(DEFAULT_ADMIN_ROLE) {
-        Invest();
+        invest();
     }
 
-    function Invest() private {
-        StayHome = false;
+    function invest() private {
+        stayHome = false;
         BUSD.safeTransfer(address(tstrat), BUSD.balanceOf(address(this)));
         // Constant function to interact with
-        tstrat.Invest();
+        tstrat.deposit();
     }
 
     function changeTreasuryContract(address newContract) public onlyRole(DEFAULT_ADMIN_ROLE) {

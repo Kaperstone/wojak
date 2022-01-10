@@ -20,6 +20,8 @@ abstract contract Bonds is Common, ERC20 {
     uint public busdBonded = 0;
     uint public bondPrice = 0;
 
+    uint availToMint = 0;
+
     address[] internal bonders;
     mapping(address => uint) public timeleft;
 
@@ -29,6 +31,8 @@ abstract contract Bonds is Common, ERC20 {
     function bond(uint wjkAmount) public {
         (bool _isBonder, ) = isBonder(msg.sender);
         require(!_isBonder, "!alreadyopen");
+
+        require(availToMint > availToMint, "!availableBonds");
 
         require(WJK.balanceOf(address(this)) >= wjkAmount, "Not enough WJK in contract");
 
@@ -47,6 +51,7 @@ abstract contract Bonds is Common, ERC20 {
 
         // Mint Chad
         _mint(msg.sender, wjkAmount);
+        availToMint -= wjkAmount;
         // Mint equivalent WJK to this contract
         wojak.mint(address(this), wjkAmount);
         // Put into staking for him, it will automatically start accumulating interest
@@ -108,6 +113,10 @@ abstract contract Bonds is Common, ERC20 {
         }
     }
 
+    function increaseAvailable() public onlyRole(KEEPER_ROLE) {
+        availToMint += staking.lastMinted() / 10; // 10% off the last mint
+    }
+
     function updateTokenPriceAtFarming() public onlyRole(KEEPER_ROLE) {
         priceAtFarming = getWJKPrice();
         bondPrice = (priceAtStaking + priceAtBonding + priceAtSelfKeeping + priceAtFarming) / 4;
@@ -128,6 +137,8 @@ abstract contract Bonds is Common, ERC20 {
 
         return 1 * res1 / res0; // return amount of BUSD needed to buy WJK
     }
+
+
 
     function _beforeTokenTransfer(
         address /* from */,

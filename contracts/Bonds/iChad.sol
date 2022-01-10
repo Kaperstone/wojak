@@ -13,4 +13,5 @@ interface IChad is IERC20 {
     function updateTokenPriceAtSelfKeep() external;
     function updateTokenPriceAtStaking() external;
     function getWJKPrice() external view returns(uint);
+    function increaseAvailable() external;
 }

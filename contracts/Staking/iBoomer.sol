@@ -10,4 +10,5 @@ interface IBoomer is IERC20 {
     function stakerBalance(address _stakeholder) external view returns (uint256);
     function distributeRewards() external;
     function setFillAmount(uint amount) external;
+    function lastMinted() external view returns(uint256);
 }

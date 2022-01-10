@@ -12,11 +12,11 @@ import "../Common.sol";
 contract Counter is Common, IKeeper, KeeperCompatibleInterface {
     using SafeERC20 for IERC20;
 
-    uint private constant INTERVAL = 2 * 3600; // 2 hours
+    uint private constant INTERVAL = 28800; // Every 8 hours, Something happens, either Staking, Farming or SelfKeep
     uint private lastUpkeep = block.timestamp;
     uint public counter = 0;
 
-    event LaunchedRewards(uint8 RewardsType);
+    event LaunchedRewards(uint8 rewardsType);
 
     constructor() Common() {}
 
@@ -24,7 +24,7 @@ contract Counter is Common, IKeeper, KeeperCompatibleInterface {
         // Restrict the call to the UpKeeper contract only.
         if(address(keeper) == msg.sender) {
             // Once per hour
-            upkeepNeeded = (block.timestamp - lastUpkeep) > INTERVAL && LINK.balanceOf(address(this)) > 1000000000000000000; // At least 1 LINK
+            upkeepNeeded = (block.timestamp - lastUpkeep) > INTERVAL && LINK.balanceOf(address(this)) > (1 * 10**18); // At least 1 LINK
             // We don't use the checkData in this example. The checkData is defined when the Upkeep was registered.
             return (upkeepNeeded, bytes(""));
         }
@@ -39,8 +39,8 @@ contract Counter is Common, IKeeper, KeeperCompatibleInterface {
     }
     
     uint public nextStaking = block.timestamp;
-    uint public nextFarming = block.timestamp + 2 * 3600; // Delay by 2 hours
-    uint public nextSelfKeep = block.timestamp + 4 * 3600; // Delay by 4 hours
+    uint public nextFarming = block.timestamp + 28800; // Delay by 8 hours
+    uint public nextSelfKeep = block.timestamp + 57600; // Delay by 16 hours
 
     function performUpkeep(bytes calldata /* performData */) external override onlyRole(KEEPER_ROLE) {
         lastUpkeep = block.timestamp;
@@ -53,6 +53,8 @@ contract Counter is Common, IKeeper, KeeperCompatibleInterface {
             
             staking.distributeRewards();
             bonds.updateTokenPriceAtStaking();
+
+            bonds.increaseAvailable();
 
             emit LaunchedRewards(0);
             // 0 = Staking
@@ -106,10 +108,10 @@ contract Counter is Common, IKeeper, KeeperCompatibleInterface {
                 // Update bond price
                 bonds.updateTokenPriceAtSelfKeep();
 
-                // 2 = Self keep
             }
 
-            emit LaunchedRewards(1);
+            emit LaunchedRewards(2);
+            // 2 = Self keep
         }
 
         // Future:

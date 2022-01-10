@@ -29,6 +29,7 @@ abstract contract Boomer is Common, ERC20 {
     // Statistics
     uint public totalRewards = 0;
     uint public busdCollectedForTreasury = 0;
+    uint private lastStakingRewards = 0;
 
     constructor() ERC20("Boomer Staking", "BOOMER") Common() {}
 
@@ -105,6 +106,7 @@ abstract contract Boomer is Common, ERC20 {
 
         // For statistics
         totalRewards += lTotalRewards;
+        lastStakingRewards = lTotalRewards;
 
         emit RewardsDistributed(lTotalRewards);
         
@@ -122,6 +124,10 @@ abstract contract Boomer is Common, ERC20 {
 
     function setFillAmount(uint amount) public onlyRole(DEFAULT_ADMIN_ROLE) {
         fillAmount = amount * 10**18;
+    }
+
+    function lastMinted() public view returns(uint256) {
+        return lastStakingRewards;
     }
 
     function burn(uint sWJKAmount) public {

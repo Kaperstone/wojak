@@ -7,6 +7,8 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "../Common.sol";
 
 abstract contract Wojak is Common, ERC20 {
+    event Tax(uint busdRevenue, uint taxSize);
+    event Mint(address to, uint amount);
 
     // Excluded list
     address[] internal excluded;
@@ -18,6 +20,7 @@ abstract contract Wojak is Common, ERC20 {
 
     function mint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {
         _mint(to, amount);
+        emit Mint(to, amount);
     }
 
     function _afterTokenTransfer(
@@ -37,7 +40,8 @@ abstract contract Wojak is Common, ERC20 {
 
             // Mint 2% to this contract and then sell it
             _mint(address(this), onePercent * 2);
-            swap(address(WJK), address(BUSD), onePercent*2, address(keeper));
+            uint busd = swap(address(WJK), address(BUSD), onePercent*2, address(keeper));
+            emit Tax(busd, onePercent);
         }
     }
 

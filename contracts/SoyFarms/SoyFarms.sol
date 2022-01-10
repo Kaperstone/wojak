@@ -9,9 +9,17 @@ import "../Common.sol";
 abstract contract SoyFarms is Common, ERC20 {
     using SafeERC20 for IERC20;
 
+    event Deposit(uint busdIn, uint soyOut);
+    event Withdraw(uint soyIn, uint busdOut, uint wjkOut);
+    event DistributedRewards(uint busdIn, uint totalWJKRewards, uint wjkOut);
+
     address[] internal farmers;
     mapping(address => uint256) public farmerAmount; 
+    // To avoid people getting in at the last minute, we require some sort of commitment.
     mapping(address => uint256) public timeleft;
+    // Because of it, the user does not receive the first reward,
+    //      Because he can deposit a large sum of busd right at the last minute and steal everyone's rewards
+    //          We require a full round of participation to receive reward.
     mapping(address => bool) public firstTime;
 
     bool public lock = false;
@@ -21,33 +29,39 @@ abstract contract SoyFarms is Common, ERC20 {
     uint public totalRewardsBought = 0;
 
     constructor() ERC20("Soy Tokens", "SOY") Common() {}
+    
+    // BUSD does not exist.
 
-    function deposit(uint busdAmount) public {
+    function deposit(uint busdAmount) public returns (uint256) {
         require(!lock, "Distribution is going on");
 
         require(BUSD.balanceOf(msg.sender) >= busdAmount, "Insufficient BUSD balance");
-        // Transfer us the BUSD
+        // Transfer us the BUSD, we first deal with this, so we don't print SOY on left and right
         BUSD.safeTransferFrom(msg.sender, address(this), busdAmount);
         // Give the man his SOY which is determined by the exchange rate
-        // busd / index = soy
-        uint soyToMint = busdAmount / (totalSupply() / busdInContract);
+        uint soyToMint = busdTokenValue(busdAmount);
 
+        // 7 day commitment
         timeleft[msg.sender] = block.timestamp + 604800;
         firstTime[msg.sender] = true;
 
+        if(balanceOf(msg.sender) == 0) addFarmer(msg.sender);
         _mint(msg.sender, soyToMint);
         // Increase busd tvl
         busdInContract += busdAmount;
 
-        if(balanceOf(msg.sender) == 0) addFarmer(msg.sender);
         depositToVenus(busdAmount);
+
+        emit Deposit(busdAmount, soyToMint);
+
+        return soyToMint;
     }
 
-    function withdraw(uint soyAmount) public {
+    function withdraw(uint soyAmount) public returns(uint256) {
         require(block.timestamp > timeleft[msg.sender], "You cannot withdraw yet.");
         require(balanceOf(msg.sender) >= soyAmount, "Insufficient SOY balance");
 
-        // Transfer tokens to contract
+        // Transfer SOY tokens to contract
         transferFrom(msg.sender, address(this), soyAmount);
 
         // Burn tokens from existence
@@ -56,26 +70,47 @@ abstract contract SoyFarms is Common, ERC20 {
         // Amount of busd to give back
         (uint busdAmount, uint wjkAmount) = farmerBalance(msg.sender);
 
+        // Decrease busd tvl
+        busdInContract -= busdAmount;
+
+        if(balanceOf(msg.sender) == 0) removeFarmer(msg.sender);
+
+        // We dealt with technical part, so we come under re-entrancy attack.
+        // Give him his rewards.
+
         // Withdraw from Venus & transfer BUSD back
         withdrawFromVenus(busdAmount);
         BUSD.safeTransfer(msg.sender, busdAmount);
 
-        // Decrease busd tvl
-        busdInContract -= busdAmount;
-
         // Transfer sWJK rewards
         sWJK.safeTransfer(msg.sender, wjkAmount);
-        if(balanceOf(msg.sender) == 0) removeFarmer(msg.sender);
+
+        emit Withdraw(soyAmount, busdAmount, wjkAmount);
+
+        return busdAmount;
     }
 
+    // For use to find underlying WJK amount
     function farmerBalance(address _farmer) public view returns (uint256, uint256) {
-        // soy * index = busd
+        // SOY * index = BUSD
         return (balanceOf(_farmer) * (totalSupply() / busdInContract) , farmerAmount[_farmer]);
+    }
+
+    // Can be used as `Index` and to find the worth of X amount of tokens
+    function stakedTokenValue(uint amount) public view returns (uint256) {
+        // SOY * index
+        return amount * (totalSupply() / busdInContract);
+    }
+
+    function busdTokenValue(uint amount) public view returns (uint256) {
+        // BUSD / index
+        return amount / (totalSupply() / busdInContract);
     }
 
     function distributeRewards() public onlyRole(KEEPER_ROLE) {
         // Perform a buyback and then put into staking all the tokens
-        uint wjkAmount = swap(address(BUSD), address(WJK), takeIncome(), address(this));
+        uint busdIncome = takeIncome();
+        uint wjkAmount = swap(address(BUSD), address(WJK), busdIncome, address(this));
         uint wjkRewards = staking.stake(wjkAmount);
         totalRewardsBought += wjkRewards;
 
@@ -88,8 +123,7 @@ abstract contract SoyFarms is Common, ERC20 {
             }
         }
 
-        staking.burn(farmerAmount[address(treasury)]);
-        farmerAmount[address(treasury)] = 0;
+        emit DistributedRewards(busdIncome, totalRewardsBought, wjkRewards);
     }
 
 
@@ -111,10 +145,12 @@ abstract contract SoyFarms is Common, ERC20 {
     }
 
     function withdrawFromVenus(uint busd) private {
+        // BUSD:vBUSD != 1:1
         vBUSD.redeem(busd * vBUSD.exchangeRateStored());
     }
 
     function calculateRevenue() public view returns (uint256) {
+        // For giggles.
         return busdInContract * vBUSD.exchangeRateStored() - busdInContract;
     }
 

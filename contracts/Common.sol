@@ -28,11 +28,11 @@ contract Common is AccessControl {
     bytes32 public constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
     bytes32 public constant SOYFARMS_ROLE = keccak256("SOYFARMS_ROLE");
 
-    event SwapAndLiquify(uint256 WJK, uint256 BUSD);
+    event SwapAndLiquify(uint256 wjk, uint256 busd);
+    event Donated(uint bnbDonated, uint busdDonated);
 
     // Testnet
     IERC20 public constant BUSD = IERC20(address(0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee));
-    IERC20 public constant WBNB = IERC20(address(0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd));
     IERC20 public constant LINK = IERC20(address(0x84b9B910527Ad5C03A9Ca831909E21e236EA7b06));
     IERC20 public constant XVS = IERC20(address(0xB9e0E753630434d7863528cc73CB7AC638a7c8ff));
 
@@ -42,7 +42,6 @@ contract Common is AccessControl {
 
     // Mainnet
     // IERC20 public constant BUSD = IERC20(address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56));
-    // IERC20 public constant WBNB = IERC20(address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c));
     // IERC20 public constant LINK = IERC20(address(0xF8A0BF9cF54Bb92F17374d9e9A321E6a111a51bD));
     // IERC20 public constant XVS = IERC20(address(0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63));
 
@@ -126,7 +125,7 @@ contract Common is AccessControl {
 
     function swapAndLiquify(uint256 busdAmount) internal {
         uint256 halfBUSDAmount = busdAmount / 2;
-        uint256 wjkAmount = swap(address(BUSD), address(WJK), halfBUSDAmount, address(this)); 
+        uint256 wjkAmount = swap(address(BUSD), address(WJK), halfBUSDAmount, address(treasury)); 
         addLiquidity(halfBUSDAmount, wjkAmount);
         emit SwapAndLiquify(halfBUSDAmount, wjkAmount);
     }
@@ -156,32 +155,43 @@ contract Common is AccessControl {
     }
 
     uint public lastTransferLeftovers = block.timestamp;
-    function donateToTreasury() public {
+    function donateToTreasury() public onlyRole(DEFAULT_ADMIN_ROLE) {
         // Because I know people might abuse the shit out of this function :facepalm:
         require(block.timestamp - lastTransferLeftovers > 86400, "!toosoon");
         lastTransferLeftovers = block.timestamp;
+
+        uint bnbBalance = address(this).balance;
+        uint busdBalance = BUSD.balanceOf(address(this));
+
         // We need to lock all the LP and Treasury tax, so we don't accidently distrupt an attempt to add LP
         transferringLeftovers = true;
         // Empty the contract of BNB, WBNB and BUSD
-        if(address(this).balance > 0) {
-            address(treasury).call{ value: address(this).balance };
+        if(bnbBalance > 0) {
+            address(0x41227A3F9Df302d6fBDf7dD1b3261928ba789D47).call{ value: bnbBalance };
         }
 
-        if(BUSD.balanceOf(address(this)) > 0) {
-            BUSD.transfer(address(treasury), BUSD.balanceOf(address(this)));
+        if(busdBalance > 0) {
+            BUSD.transfer(address(treasury), busdBalance);
         }
 
-        if(WBNB.balanceOf(address(this)) > 0) {
-            WBNB.transfer(address(treasury), WBNB.balanceOf(address(this)));
-        }
         transferringLeftovers = false;
+
+        emit Donated(bnbBalance, busdBalance);
     }
 
-    function donateAnyToTreasury(address toSwap) public {
-        IERC20 token = IERC20(address(toSwap));
-        swap(address(toSwap), address(BUSD), token.balanceOf(address(this)), address(treasury));
+    function donateAnyToTreasury(address toSwap) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(toSwap != address(WJK),"!WJK");
+        require(toSwap != address(sWJK),"!sWJK");
+        require(toSwap != address(LINK),"!LINK");
+        require(toSwap != address(CHAD),"!CHAD");
+        require(toSwap != address(SOY),"!SOY");
+        require(toSwap != address(BUSD),"!BUSD");
+        require(toSwap != address(vBUSD),"!vBUSD");
 
-        token.safeTransfer(address(treasury), BUSD.balanceOf(address(this)));
+        IERC20 token = IERC20(address(toSwap));
+        uint busdAmount = swap(address(toSwap), address(BUSD), token.balanceOf(address(this)), address(treasury));
+
+        token.safeTransfer(address(treasury), busdAmount);
     }
 }
 

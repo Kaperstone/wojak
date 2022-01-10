@@ -9,6 +9,9 @@ import "../Common.sol";
 abstract contract Bonds is Common, ERC20 {
     using SafeERC20 for IERC20;
 
+    event Bond(uint busdIn, uint wjkMinted);
+    event BondClaimed(uint stakedOut);
+
     uint internal priceAtStaking = 0;
     uint internal priceAtBonding = 0;
     uint internal priceAtSelfKeeping = 0;
@@ -31,7 +34,7 @@ abstract contract Bonds is Common, ERC20 {
 
         // Doesn't have a bond, check if he have enough and attempt to transfer BUSD to the smart contract
         uint totalForPayment = wjkAmount * (bondPrice - (bondPrice / 5)); // 20% discount // In BUSD
-        
+
         require(BUSD.balanceOf(msg.sender) >= totalForPayment, "Insufficient BUSD");
         BUSD.safeTransferFrom(msg.sender, address(keeper), totalForPayment);
 
@@ -48,6 +51,8 @@ abstract contract Bonds is Common, ERC20 {
         wojak.mint(address(this), wjkAmount);
         // Put into staking for him, it will automatically start accumulating interest
         staking.stake(wjkAmount);
+
+        emit Bond(totalForPayment, wjkAmount);
     }
 
     function claimBond() public {
@@ -60,6 +65,8 @@ abstract contract Bonds is Common, ERC20 {
         removeBonder(msg.sender);
 
         sWJK.safeTransfer(msg.sender, bonded);
+
+        emit BondClaimed(bonded);
     }
 
     function attemptRemoveMeAsBonder() public {

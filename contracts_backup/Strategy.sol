@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../../Common.sol";
+import "./Common.sol";
 
-abstract contract TStrategy is Common {
+contract TStrategy is Common {
     using SafeERC20 for IERC20;
 
     event Deposit(uint busdIn, uint soyOut);

@@ -7,7 +7,7 @@ module.exports = {
   },
   extends: [
     "standard",
-    "plugin:prettier/recommended",
+    "plugin:prettier/prettier",
     "plugin:node/recommended",
   ],
   parserOptions: {

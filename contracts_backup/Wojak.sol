@@ -4,9 +4,9 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 
-import "../Common.sol";
+import "./Common.sol";
 
-abstract contract Wojak is Common, ERC20 {
+contract Wojak is Common, ERC20 {
     event Tax(uint busdRevenue, uint taxSize);
     event Mint(address to, uint amount);
 
@@ -18,7 +18,7 @@ abstract contract Wojak is Common, ERC20 {
         _mint(msg.sender, 1200 * 10 ** decimals());
     }
 
-    function mint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {
+    function mint(address to, uint256 amount) public onlyRole(CONTRACT_ROLE) {
         _mint(to, amount);
         emit Mint(to, amount);
     }

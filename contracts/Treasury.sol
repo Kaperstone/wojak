@@ -1,13 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../Common.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 
 // When in treasury, busd is in the treasury
 // When in investment, ib tokens in the strategy
 
-contract Treasury is Common {
+contract Treasury is AccessControl {
     using SafeERC20 for IERC20;
+
+    bytes32 public constant CONTRACT_ROLE = keccak256("CONTRACT_ROLE");
+
+    IWojak public WJK = IWojak(address(0));
+    IStaking public sWJK = IStaking(address(0));
+    ITStrategy public TStrategy = ITStrategy(address(0));
+    // Testnet
+    IERC20 public constant BUSD = IERC20(address(0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee));
+    // Mainnet
+    // IERC20 public constant BUSD = IERC20(address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56));
 
     event TreasuryAdded(uint busd);
     event ToWork(uint busdBalance);
@@ -18,7 +30,10 @@ contract Treasury is Common {
     // Treasury only holds BUSD
     uint public busdInTreasury = 0;
 
-    constructor() Common() {}
+    constructor() {
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(CONTRACT_ROLE, msg.sender);
+    }
 
     function addToTreasury() public {
         // Instead of using a function to transfer and dealing with "approve" and wasting on it gas
@@ -44,7 +59,7 @@ contract Treasury is Common {
     function get() public onlyRole(DEFAULT_ADMIN_ROLE) {
         stayHome = true;
         // Constant function to interact with
-        tstrat.withdraw();
+        TStrategy.withdraw();
 
         emit FromWork(BUSD.balanceOf(address(this)));
     }
@@ -59,9 +74,9 @@ contract Treasury is Common {
 
     function invest() private {
         // Without approve, just send to the strategy
-        BUSD.safeTransfer(address(tstrat), BUSD.balanceOf(address(this)));
+        BUSD.safeTransfer(address(TStrategy), BUSD.balanceOf(address(this)));
         // Constant function to interact with
-        tstrat.deposit();
+        TStrategy.deposit();
     }
 
     function changeTreasuryContract(address newContract) public onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -72,9 +87,39 @@ contract Treasury is Common {
         uint wjkAmount = WJK.balanceOf(address(this));
         uint swjkAmount = sWJK.balanceOf(address(this)); 
 
-        wojak.burn(wjkAmount);
-        staking.burn(swjkAmount);
+        WJK.burn(wjkAmount);
+        sWJK.burn(swjkAmount);
         
         emit Burn(wjkAmount, swjkAmount);
     }
+
+    function setAddressToken(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        WJK = IWojak(newAddress);
+        grantRole(CONTRACT_ROLE, newAddress);
+    }
+
+    function setAddressStaking(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        sWJK = IStaking(newAddress);
+        grantRole(CONTRACT_ROLE, newAddress);
+    }
+
+    function setAddressTreasuryStrategy(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        TStrategy = ITStrategy(newAddress);
+        grantRole(CONTRACT_ROLE, newAddress);
+    }
+}
+
+interface IWojak {
+    function balanceOf(address account) external view returns (uint256);
+    function burn(uint amount) external;
+}
+
+interface IStaking {
+    function balanceOf(address account) external view returns (uint256);
+    function burn(uint amount) external;
+}
+
+interface ITStrategy {
+    function deposit() external;
+    function withdraw() external;
 }

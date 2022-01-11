@@ -4,9 +4,9 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "../Common.sol";
+import "./Common.sol";
 
-abstract contract Boomer is Common, ERC20 {
+contract Boomer is Common, ERC20 {
     using SafeERC20 for IERC20;
 
     event Stake(uint wjkAmount);
@@ -94,7 +94,7 @@ abstract contract Boomer is Common, ERC20 {
     // ---------- REWARDS ----------
 
     // Distribute once per 24 hours
-    function distributeRewards() public onlyRole(KEEPER_ROLE) {
+    function distributeRewards() public onlyRole(CONTRACT_ROLE) {
         require((lastStakingRewardsTimestamp - block.timestamp) > 21600, "!6hr");
         // Set immediately the new timestamp
         lastStakingRewardsTimestamp = lastStakingRewardsTimestamp + 21600;

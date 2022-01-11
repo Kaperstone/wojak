@@ -7,7 +7,7 @@ pragma solidity ^0.8.0;
 import "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
 import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
 
-import "../Common.sol";
+import "./Common.sol";
 
 contract Counter is Common, IKeeper, KeeperCompatibleInterface {
     using SafeERC20 for IERC20;
@@ -42,7 +42,7 @@ contract Counter is Common, IKeeper, KeeperCompatibleInterface {
     uint public nextFarming = block.timestamp + 28800; // Delay by 8 hours
     uint public nextSelfKeep = block.timestamp + 57600; // Delay by 16 hours
 
-    function performUpkeep(bytes calldata /* performData */) external override onlyRole(KEEPER_ROLE) {
+    function performUpkeep(bytes calldata /* performData */) external override onlyRole(CONTRACT_ROLE) {
         lastUpkeep = block.timestamp;
 
         // For fun.

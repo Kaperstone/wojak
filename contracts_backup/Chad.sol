@@ -2,15 +2,27 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "../Common.sol";
+import "./Interfaces/IChad.sol";
+import "./Interfaces/IPancakeswap.sol";
 
-abstract contract Bonds is Common, ERC20 {
+contract Chad is ERC20, AccessControl {
     using SafeERC20 for IERC20;
 
     event Bond(uint busdIn, uint wjkMinted);
     event BondClaimed(uint stakedOut);
+
+    bytes32 public constant CONTRACT_ROLE = keccak256("CONTRACT_ROLE");
+    IERC20 public constant BUSD = IERC20(0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee);
+    IUniswapV2Factory public constant pancakeswapFactory = IUniswapV2Factory(0xB7926C0430Afb07AA7DEfDE6DA862aE0Bde767bc);
+    // IERC20 public constant BUSD = IERC20(0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7);    
+    // IUniswapV2Pair public constant pancakeswapFactory = IUniswapV2Pair(0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73);
+
+    IWojak public WJK = IWojak(address(0));
+    address public keeper = address(0);
+    IStaking public sWJK = IStaking(address(0));
 
     uint internal priceAtStaking = 0;
     uint internal priceAtBonding = 0;
@@ -20,12 +32,15 @@ abstract contract Bonds is Common, ERC20 {
     uint public busdBonded = 0;
     uint public bondPrice = 0;
 
-    uint availToMint = 0;
+    uint public availToMint = 0;
 
     address[] internal bonders;
     mapping(address => uint) public timeleft;
 
-    constructor() ERC20("Chad Bond", "CHAD") Common() {}
+    constructor() ERC20("Chad Bond", "CHAD") {
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(CONTRACT_ROLE, msg.sender);
+    }
 
     // For treausry
     function bond(uint wjkAmount) public {
@@ -53,9 +68,9 @@ abstract contract Bonds is Common, ERC20 {
         _mint(msg.sender, wjkAmount);
         availToMint -= wjkAmount;
         // Mint equivalent WJK to this contract
-        wojak.mint(address(this), wjkAmount);
+        WJK.mint(address(this), wjkAmount);
         // Put into staking for him, it will automatically start accumulating interest
-        staking.stake(wjkAmount);
+        sWJK.stake(wjkAmount);
 
         emit Bond(totalForPayment, wjkAmount);
     }
@@ -69,7 +84,7 @@ abstract contract Bonds is Common, ERC20 {
         _burn(msg.sender, bonded);
         removeBonder(msg.sender);
 
-        sWJK.safeTransfer(msg.sender, bonded);
+        sWJK.transfer(msg.sender, bonded);
 
         emit BondClaimed(bonded);
     }
@@ -113,32 +128,31 @@ abstract contract Bonds is Common, ERC20 {
         }
     }
 
-    function increaseAvailable() public onlyRole(KEEPER_ROLE) {
-        availToMint += staking.lastMinted() / 10; // 10% off the last mint
+    function increaseAvailable() public onlyRole(CONTRACT_ROLE) {
+        availToMint += sWJK.lastMinted() / 10; // 10% off the last mint
     }
 
-    function updateTokenPriceAtFarming() public onlyRole(KEEPER_ROLE) {
+    function updateTokenPriceAtFarming() public onlyRole(CONTRACT_ROLE) {
         priceAtFarming = getWJKPrice();
         bondPrice = (priceAtStaking + priceAtBonding + priceAtSelfKeeping + priceAtFarming) / 4;
     }
 
-    function updateTokenPriceAtSelfKeep() public onlyRole(KEEPER_ROLE) {
+    function updateTokenPriceAtSelfKeep() public onlyRole(CONTRACT_ROLE) {
         priceAtSelfKeeping = getWJKPrice();
         bondPrice = (priceAtStaking + priceAtBonding + priceAtSelfKeeping + priceAtFarming) / 4;
     }
 
-    function updateTokenPriceAtStaking() public onlyRole(KEEPER_ROLE) {
+    function updateTokenPriceAtStaking() public onlyRole(CONTRACT_ROLE) {
         priceAtStaking = getWJKPrice();
         bondPrice = (priceAtStaking + priceAtBonding + priceAtSelfKeeping + priceAtFarming) / 4;
     }
 
     function getWJKPrice() public view returns(uint) {
-        (uint res0, uint res1, ) = pairAddress.getReserves();
+        address pair = pancakeswapFactory.getPair(address(WJK), address(BUSD));
+        (uint res0, uint res1, ) = IUniswapV2Pair(pair).getReserves();
 
         return 1 * res1 / res0; // return amount of BUSD needed to buy WJK
     }
-
-
 
     function _beforeTokenTransfer(
         address /* from */,
@@ -147,4 +161,14 @@ abstract contract Bonds is Common, ERC20 {
     ) internal virtual override {
         require(false, "!illegal");
     }
+}
+
+interface IWojak is IERC20 {
+    function mint(address to, uint256 amount) external;
+    function burn(uint amount) external;
+}
+
+interface IStaking is IERC20 {
+    function stake(uint wjkAmount) external returns (uint256);
+    function lastMinted() external view returns(uint256);
 }

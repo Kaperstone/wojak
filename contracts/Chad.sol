@@ -16,7 +16,7 @@ contract Chad is ERC20, AccessControl {
 
     bytes32 public constant CONTRACT_ROLE = keccak256("CONTRACT_ROLE");
     
-    IERC20 public constant BUSD = IERC20(0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee);
+    IERC20 public constant BUSD = IERC20(0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7);
     IUniswapV2Factory public constant pancakeswapFactory = IUniswapV2Factory(0xB7926C0430Afb07AA7DEfDE6DA862aE0Bde767bc);
     // IERC20 public constant BUSD = IERC20(0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7);    
     // IUniswapV2Pair public constant pancakeswapFactory = IUniswapV2Pair(0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73);

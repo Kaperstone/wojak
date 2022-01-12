@@ -21,8 +21,8 @@ contract Boomer is ERC20, AccessControl {
 
     IWojak public WJK = IWojak(address(0));
     address public keeper = address(0);
-    address public constant BUSD = 0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee;
-    IUniswapV2Router02 public constant pancakeswapRouter = IUniswapV2Router02(address(0xB9e0E753630434d7863528cc73CB7AC638a7c8ff));
+    address public constant BUSD = 0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7;
+    IUniswapV2Router02 public constant pancakeswapRouter = IUniswapV2Router02(address(0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3));
     // address public constant BUSD = 0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7;
     // IUniswapV2Router02 public constant pancakeswapRouter = IUniswapV2Router02(address(0xB9e0E753630434d7863528cc73CB7AC638a7c8ff));
 
@@ -112,7 +112,7 @@ contract Boomer is ERC20, AccessControl {
         // Set immediately the new timestamp
         lastStakingRewardsTimestamp = lastStakingRewardsTimestamp + 21600;
 
-        uint lTotalRewards = wjkBalance / 800; // We just raise the amount of wjk contract holds
+        uint lTotalRewards = wjkBalance / 200; // We just raise the amount of wjk contract holds
 
         // Mint to the contract
         WJK.mint(address(this), lTotalRewards);

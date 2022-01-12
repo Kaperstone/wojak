@@ -21,20 +21,20 @@ contract SoyFarms is ERC20, AccessControl {
     IStaking public sWJK = IStaking(address(0));
 
     // Testnet
-    IERC20 public constant BUSD = IERC20(0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee);
-    IERC20 public constant XVS = IERC20(0xB9e0E753630434d7863528cc73CB7AC638a7c8ff);
+    IERC20 public constant BUSD = IERC20(0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7);
+    IERC20 public constant QBT = IERC20(0xF523e4478d909968090a232eB380E2dd6f802518);
+    IERC20 public constant qBUSD = IERC20(0x38e2Ab4caDd92b87739aA5A71847e0B70bD4e631);
+    Qore public qore = Qore(0xb3f98A31A02d133f65da961086EcDa4133bdf48e);
 
-    VTokenInterface public constant vBUSD = VTokenInterface(0x08e0A5575De71037aE36AbfAfb516595fE68e5e4);
-    IUniswapV2Router02 public constant pancakeswapRouter = IUniswapV2Router02(0xB9e0E753630434d7863528cc73CB7AC638a7c8ff);
-    IVenusComptroller public constant unitroller = IVenusComptroller(0x94d1820b2D1c7c7452A163983Dc888CEC546b77D);
+    IUniswapV2Router02 public constant pancakeswapRouter = IUniswapV2Router02(0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3);
 
     // Mainnet
     // IERC20 public constant BUSD = IERC20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
-    // IERC20 public constant XVS = IERC20(0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63);
+    // IERC20 public constant QBT = IERC20(0x17B7163cf1Dbd286E262ddc68b553D899B93f526);
+    // IERC20 public constant qBUSD = IERC20(0xa3A155E76175920A40d2c8c765cbCB1148aeB9D1);
+    // Qore public qore = Qore(0xf70314eb9c7fe7d88e6af5aa7f898b3a162dcd48);
 
-    // VTokenInterface public constant vBUSD = VTokenInterface(0x95c78222B3D6e262426483D42CfA53685A67Ab9D);
     // IUniswapV2Router02 public constant pancakeswapRouter = IUniswapV2Router02(0xB9e0E753630434d7863528cc73CB7AC638a7c8ff);
-    // IVenusComptroller public constant unitroller = IVenusComptroller(0xfD36E2c2a6789Db23113685031d7F16329158384);
 
     address[] internal farmers;
     mapping(address => uint256) public farmerAmount; 
@@ -154,30 +154,30 @@ contract SoyFarms is ERC20, AccessControl {
 
 
     function takeIncome() public returns (uint256) {
-        unitroller.claimVenus(address(this));
-        uint busdFromXVS = swap(address(XVS), address(WJK), XVS.balanceOf(address(this)), address(this));
+        qore.claimQubit();
+        uint busdFromQBT = swap(address(QBT), address(WJK), QBT.balanceOf(address(this)), address(this));
 
-        uint exchangeRate = vBUSD.exchangeRateStored();
+        uint exchangeRate = qore.exchangeRate();
         uint busdRevenue = busdInContract * exchangeRate - busdInContract;
 
         // Get accurate revenue
-        vBUSD.redeem(busdRevenue / exchangeRate);
+        qore.redeemToken(address(qBUSD), busdRevenue / exchangeRate);
 
-        return busdRevenue + busdFromXVS;
+        return busdRevenue + busdFromQBT;
     }
     
     function depositToVenus(uint busd) private {
-        vBUSD.mint(busd);
+        qore.supply(address(qBUSD), busd);
     }
 
     function withdrawFromVenus(uint busd) private {
-        // BUSD:vBUSD != 1:1
-        vBUSD.redeem(busd * vBUSD.exchangeRateStored());
+        // BUSD:qBUSD != 1:1
+        qore.redeemToken(address(qBUSD), busd * qore.exchangeRate());
     }
 
     function calculateRevenue() public view returns (uint256) {
         // For giggles.
-        return busdInContract * vBUSD.exchangeRateStored() - busdInContract;
+        return busdInContract * qore.exchangeRate() - busdInContract;
     }
 
     function isFarmer(address _address) public view returns(bool, uint) {
@@ -238,14 +238,11 @@ contract SoyFarms is ERC20, AccessControl {
     }
 }
 
-interface IVenusComptroller {
-  function claimVenus(address holder) external;
-}
-
-interface VTokenInterface is IERC20 {
-    function exchangeRateStored() external view returns (uint);
-    function mint(uint mintAmount) external returns (uint);
-    function redeem(uint redeemTokens) external returns (uint);
+interface Qore {
+    function claimQubit() external;
+    function exchangeRate() external view returns (uint);
+    function supply(address qToken, uint underlyingAmount) external payable returns (uint);
+    function redeemToken(address qToken, uint qTokenAmount) external returns (uint redeemed);
 }
 
 interface IStaking is IERC20 {

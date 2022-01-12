@@ -31,9 +31,9 @@ contract Keeper is KeeperCompatibleInterface, AccessControl {
     ITreasury public Treasury = ITreasury(address(0));
     ISoyFarms public SoyFarms = ISoyFarms(address(0));
     // Testnet
-    IERC20 public constant BUSD = IERC20(0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee);
+    IERC20 public constant BUSD = IERC20(0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7);
     IERC20 public constant LINK = IERC20(0x84b9B910527Ad5C03A9Ca831909E21e236EA7b06);
-    IUniswapV2Router02 public constant pancakeswapRouter = IUniswapV2Router02(0xB9e0E753630434d7863528cc73CB7AC638a7c8ff);
+    IUniswapV2Router02 public constant pancakeswapRouter = IUniswapV2Router02(0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3);
     // Mainnet
     // IERC20 public constant BUSD = IERC20(0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7);
     // IERC20 public constant LINK = IERC20(0xF8A0BF9cF54Bb92F17374d9e9A321E6a111a51bD);

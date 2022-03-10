@@ -2,41 +2,36 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./Interfaces/IChad.sol";
-import "./Interfaces/IPancakeswap.sol";
+import "./IPancakeswap.sol";
 
-contract Chad is ERC20, AccessControl {
-    using SafeERC20 for IERC20;
+contract Chad is ERC20, AccessControlEnumerable {
+    using SafeERC20 for IIERC20;
+    using SafeERC20 for IStaking;
 
-    event Bond(uint busdIn, uint wjkMinted);
+    event Bond(uint usdcIn, uint wjkMinted);
     event BondClaimed(uint stakedOut);
 
-    bytes32 public constant CONTRACT_ROLE = keccak256("CONTRACT_ROLE");
+    bytes32 private constant CONTRACT_ROLE = keccak256("CONTRACT_ROLE");
+    bytes32 private constant BONDERS = keccak256("BONDERS");
     
-    IERC20 public constant BUSD = IERC20(0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7);
-    IUniswapV2Factory public constant pancakeswapFactory = IUniswapV2Factory(0xB7926C0430Afb07AA7DEfDE6DA862aE0Bde767bc);
-    // IERC20 public constant BUSD = IERC20(0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7);    
-    // IUniswapV2Pair public constant pancakeswapFactory = IUniswapV2Pair(0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73);
+    IIERC20 public constant USDC = IIERC20(0x04068DA6C83AFCFA0e13ba15A6696662335D5B75);
+    IUniswapV2Factory public constant SWAP_FACTORY = IUniswapV2Factory(0x152eE697f2E276fA89E96742e9bB9aB1F2E61bE3);
 
-    IWojak public WJK = IWojak(address(0));
+    IWojak public wjk = IWojak(address(0));
+    IStaking public swjk = IStaking(address(0));
     address public keeper = address(0);
-    IStaking public sWJK = IStaking(address(0));
 
-    uint internal priceAtStaking = 0;
-    uint internal priceAtBonding = 0;
-    uint internal priceAtSelfKeeping = 0;
-    uint internal priceAtFarming = 0;
+    mapping(uint => uint) private prices;
     
-    uint public busdBonded = 0;
+    uint public usdcCollected = 0;
     uint public bondPrice = 0;
 
-    uint public availToMint = 0;
+    mapping(address => uint) private bondLock;
 
-    address[] internal bonders;
-    mapping(address => uint) public timeleft;
+    uint public bonded = 0;
 
     constructor() ERC20("Chad Bond", "CHAD") {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -44,147 +39,107 @@ contract Chad is ERC20, AccessControl {
     }
 
     // For treausry
-    function bond(uint wjkAmount) public {
-        (bool _isBonder, ) = isBonder(msg.sender);
-        require(!_isBonder, "!alreadyopen");
+    function bond(uint wjkAmount) public returns (uint) {
+        require(wjkAmount > 10**16, "Bond too small"); // 0.01 wjk
 
-        require(availToMint > availToMint, "!availableBonds");
+        // Bonds bought, transfer the amount bought to the staking right away
+        // So the amount of wjk we are left, is really what we are left with.
+        require(wjk.balanceOf(address(this)) >= wjkAmount, "!availableBonds");
 
-        require(WJK.balanceOf(address(this)) >= wjkAmount, "Not enough WJK in contract");
+        // Doesn't have a bond, check if he have enough and attempt to transfer USDC to the smart contract
+        uint totalForPayment = wjkAmount * (bondPrice - (bondPrice / 5)) / 10**(18 + 18 - USDC.decimals()); // 20% discount // In USDC
+        USDC.safeTransferFrom(msg.sender, keeper, totalForPayment);
 
-        // Doesn't have a bond, check if he have enough and attempt to transfer BUSD to the smart contract
-        uint totalForPayment = wjkAmount * (bondPrice - (bondPrice / 5)); // 20% discount // In BUSD
+        bonded += wjkAmount;
+        usdcCollected += totalForPayment;
 
-        require(BUSD.balanceOf(msg.sender) >= totalForPayment, "Insufficient BUSD");
-        BUSD.safeTransferFrom(msg.sender, keeper, totalForPayment);
+        bondLock[msg.sender] = block.timestamp + 600; //345600;
 
-        busdBonded += totalForPayment;
-
-        timeleft[msg.sender] = block.timestamp + 345600;
-        addBonder(msg.sender);
-
-        updateBondPrice();
-
-        // Mint Chad
-        _mint(msg.sender, wjkAmount);
-        availToMint -= wjkAmount;
-        // Mint equivalent WJK to this contract
-        WJK.mint(address(this), wjkAmount);
         // Put into staking for him, it will automatically start accumulating interest
-        sWJK.stake(wjkAmount);
+        wjk.approve(address(swjk), wjkAmount);
+        uint staked = swjk.stake(wjkAmount);
+        // Mint Chad 1:1 to his eligable swjk
+        _mint(msg.sender, staked);
+
+        _grantRole(BONDERS, msg.sender);
 
         emit Bond(totalForPayment, wjkAmount);
+        IKeeper(keeper).distributeRewards();
+
+        return totalForPayment;
     }
 
-    function claimBond() public {
-        uint bonded = balanceOf(msg.sender);
-        require(bonded > 0, "Not enough bonds");
+    function claimBond() public onlyRole(BONDERS) returns (uint) {
+        uint bondSize = balanceOf(msg.sender);
+        require(bondSize > 0, "Not enough bonds");
 
-        require(block.timestamp > timeleft[msg.sender], "You cannot unbond yet.");
+        require(block.timestamp > bondLock[msg.sender], "You cannot claim bond yet");
 
-        _burn(msg.sender, bonded);
-        removeBonder(msg.sender);
+        _burn(msg.sender, bondSize);
+        // Transfer him his boomers
+        swjk.safeTransfer(msg.sender, bondSize);
 
-        sWJK.transfer(msg.sender, bonded);
+        _revokeRole(BONDERS, msg.sender);
 
-        emit BondClaimed(bonded);
+        emit BondClaimed(bondSize);
+        IKeeper(keeper).distributeRewards();
+
+        return bondSize;
     }
 
-    function attemptRemoveMeAsBonder() public {
-        if(balanceOf(msg.sender) == 0) removeBonder(msg.sender);
+    function timeleft(address _bonder) public view returns (uint) {
+        return bondLock[_bonder];
     }
 
-    function burnAllMyTokens() public {
-        _burn(msg.sender, balanceOf(msg.sender));
-    }
-
-    function isBonder(address _address) public view returns(bool, uint) {
-        for (uint x = 0; x < bonders.length; x++){
-            if (_address == bonders[x]) return (true, x);
-        }
-        return (false, 0);
-    }
-
-    function addBonder(address _bonder) internal {
-        (bool _isBonder, ) = isBonder(_bonder);
-        if(!_isBonder) bonders.push(_bonder);
-    }
-
-    function removeBonder(address _bonder) internal {
-        (bool _isBonder, uint x) = isBonder(_bonder);
-        if(_isBonder) {
-            bonders[x] = bonders[bonders.length - 1];
-            bonders.pop();
-        } 
-    }
-
-    uint internal lastBondUpdate = block.timestamp;
-    function updateBondPrice() internal {
-        if(block.timestamp > lastBondUpdate) {
-            priceAtBonding = getWJKPrice();
-            // Average price
-            bondPrice = (priceAtStaking + priceAtBonding + priceAtSelfKeeping + priceAtFarming) / 4;
-
-            lastBondUpdate = block.timestamp + 21600;
-        }
-    }
-
-    function increaseAvailable() public onlyRole(CONTRACT_ROLE) {
-        availToMint += sWJK.lastMinted() / 10; // 10% off the last mint
-    }
-
-    function updateTokenPriceAtFarming() public onlyRole(CONTRACT_ROLE) {
-        priceAtFarming = getWJKPrice();
-        bondPrice = (priceAtStaking + priceAtBonding + priceAtSelfKeeping + priceAtFarming) / 4;
-    }
-
-    function updateTokenPriceAtSelfKeep() public onlyRole(CONTRACT_ROLE) {
-        priceAtSelfKeeping = getWJKPrice();
-        bondPrice = (priceAtStaking + priceAtBonding + priceAtSelfKeeping + priceAtFarming) / 4;
-    }
-
-    function updateTokenPriceAtStaking() public onlyRole(CONTRACT_ROLE) {
-        priceAtStaking = getWJKPrice();
-        bondPrice = (priceAtStaking + priceAtBonding + priceAtSelfKeeping + priceAtFarming) / 4;
-    }
-
-    function getWJKPrice() public view returns(uint) {
-        address pair = pancakeswapFactory.getPair(address(WJK), address(BUSD));
+    uint private x = 0; // No need to create a public function for this
+    function updatePrice() public onlyRole(CONTRACT_ROLE) {
+        // Record a trace of 5
+        address pair = SWAP_FACTORY.getPair(address(wjk), address(USDC));
         (uint res0, uint res1, ) = IUniswapV2Pair(pair).getReserves();
+        prices[x++] = res0*10**(36 - USDC.decimals()) / res1;
 
-        return 1 * res1 / res0; // return amount of BUSD needed to buy WJK
+        uint sum = 0;
+        for(uint y=0;y<5;y++) sum += prices[y];
+        bondPrice = sum / 5; // Create an average price for the last 5 iterations
+        // Every 5 iterations = reset
+        if(x == 5) x = 0;
     }
 
+    // Restrict transfers of the token
     function _beforeTokenTransfer(
-        address /* from */,
-        address /* to */,
-        uint256 /* amount */
+        address from,
+        address to,
+        uint /* amount */
     ) internal virtual override {
-        require(false, "!illegal");
+        if(from != address(0) && to != address(0) && from != address(this) && to != address(this)) require(false, "!illegal");
     }
 
     function setAddressToken(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        WJK = IWojak(newAddress);
-        grantRole(CONTRACT_ROLE, newAddress);
+        wjk = IWojak(newAddress);
+    }
+
+    function setAddressStaking(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        swjk = IStaking(newAddress);
     }
 
     function setAddressKeeper(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
         keeper = newAddress;
-        grantRole(CONTRACT_ROLE, newAddress);
-    }
-
-    function setAddressStaking(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        sWJK = IStaking(newAddress);
-        grantRole(CONTRACT_ROLE, newAddress);
     }
 }
 
 interface IWojak is IERC20 {
-    function mint(address to, uint256 amount) external;
-    function burn(uint amount) external;
+    function mint(address, uint) external;
+    function burn(uint) external;
 }
 
 interface IStaking is IERC20 {
-    function stake(uint wjkAmount) external returns (uint256);
-    function lastMinted() external view returns(uint256);
+    function stake(uint) external returns (uint);
+}
+
+interface IIERC20 is IERC20 {
+    function decimals() external returns (uint);
+}
+
+interface IKeeper {
+    function distributeRewards() external;
 }

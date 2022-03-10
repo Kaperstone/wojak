@@ -5,206 +5,211 @@ pragma solidity ^0.8.0;
 // This contract is executed at least once per block (15sec)
 
 import "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
-import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./Interfaces/IKeeper.sol";
-import "./Interfaces/IPancakeswap.sol";
+import "./IPancakeswap.sol";
 
-contract Keeper is KeeperCompatibleInterface, AccessControl {
+contract Keeper is KeeperCompatibleInterface, AccessControlEnumerable {
     using SafeERC20 for IERC20;
 
-    uint private constant INTERVAL = 28800; // Every 8 hours, Something happens, either Staking, Farming or SelfKeep
-    uint private lastUpkeep = block.timestamp;
-    uint public counter = 0;
+    // Configuration
+    // Testing: 120 seconds = 2 minutes
+    uint private constant INTERVAL = 86400; // Every 24 hours (86400)
+    uint private constant DIST_INTERVAL = 3600; // Every 1 hour (3600)
 
-    event LaunchedRewards(uint8 rewardsType);
-    event SwapAndLiquify(uint256 wjk, uint256 busd);
+    uint public lastKeep = block.timestamp;
+    uint public totalUpkeeps = 0;
 
-    bytes32 public constant CONTRACT_ROLE = keccak256("CONTRACT_ROLE");    
+    uint public constant _decimals = 6; // USDC decimals
 
-    IERC20 public WJK = IERC20(address(0));
-    IStaking public sWJK = IStaking(address(0));
-    IChad public Chad = IChad(address(0));
-    ITreasury public Treasury = ITreasury(address(0));
-    ISoyFarms public SoyFarms = ISoyFarms(address(0));
-    // Testnet
-    IERC20 public constant BUSD = IERC20(0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7);
-    IERC20 public constant LINK = IERC20(0x84b9B910527Ad5C03A9Ca831909E21e236EA7b06);
-    IUniswapV2Router02 public constant pancakeswapRouter = IUniswapV2Router02(0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3);
-    // Mainnet
-    // IERC20 public constant BUSD = IERC20(0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7);
-    // IERC20 public constant LINK = IERC20(0xF8A0BF9cF54Bb92F17374d9e9A321E6a111a51bD);
-    // IUniswapV2Router02 public constant pancakeswapRouter = IUniswapV2Router02(0xB9e0E753630434d7863528cc73CB7AC638a7c8ff);
+    bytes32 private constant TARGETS = keccak256("TARGETS");
+    bytes32 private constant TOKENS = keccak256("TOKENS");
+
+    event SelfKeep();
+
+    IERC public wjk = IERC(address(0));
+    address public swjk = address(0);
+    IChad public chad = IChad(address(0));
+    ITreasury public treasury = ITreasury(address(0));
+
+    IERC20 public constant USDC = IERC20(0x04068DA6C83AFCFA0e13ba15A6696662335D5B75);
+    IERC20 public constant WFTM = IERC20(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
+    IUniswapV2Router02 public constant SWAP_ROUTER = IUniswapV2Router02(0xF491e7B69E4244ad4002BC14e878a34207E38c29);
+
+    uint public forLiquidity = 0;
+    mapping(address => uint) public forTokens;
 
     constructor() {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _setupRole(CONTRACT_ROLE, msg.sender);
     }
 
-    function checkUpkeep(bytes calldata /* checkData */) external view override onlyRole(CONTRACT_ROLE) returns (bool upkeepNeeded, bytes memory /* performData */) {
-        // Restrict the call to the UpKeeper contract only.
-        // Once per hour
-        upkeepNeeded = (block.timestamp - lastUpkeep) > INTERVAL && LINK.balanceOf(address(this)) > (1 * 10**18); // At least 1 LINK
-        // We don't use the checkData in this example. The checkData is defined when the Upkeep was registered.
-        return (upkeepNeeded, bytes(""));
+    function checkUpkeep(bytes calldata /* checkData */) external view override returns (bool upkeepNeeded, bytes memory /* performData */) {
+        upkeepNeeded = (block.timestamp - lastKeep) > INTERVAL && !lock;
     }
     
-    uint public nextStaking = block.timestamp;
-    uint public nextFarming = block.timestamp + 28800; // Delay by 8 hours
-    uint public nextSelfKeep = block.timestamp + 57600; // Delay by 16 hours
+    uint private blockNum = 0;
+    bool private lock = false;
+    uint private distsLeft = 0;
+    function performUpkeep(bytes calldata /* performData */) external override {
+        // Until this (single) transaction is not completed, lock the entire function.
+        require(blockNum != block.number, "!block.number");
+        blockNum = block.number;
+        require(!lock,"locked");
+        lock = true;
+        require((block.timestamp - lastKeep) > INTERVAL, "!time");
+        lastKeep = block.timestamp;
 
-    function performUpkeep(bytes calldata /* performData */) external override onlyRole(CONTRACT_ROLE) {
-        lastUpkeep = block.timestamp;
+        _distributeRewards();
 
-        // For fun.
-        counter = counter + 1;
-        
-        if(block.timestamp > nextStaking) {
-            nextStaking += (INTERVAL * 3);
-            
-            sWJK.distributeRewards();
-            Chad.updateTokenPriceAtStaking();
+        // Push price update
+        chad.updatePrice();
 
-            Chad.increaseAvailable();
+        if((dists - distsLeft) > 6) {
+            // Reset the count
+            distsLeft = dists;
 
-            emit LaunchedRewards(0);
-            // 0 = Staking
-        }
-
-        if(block.timestamp > nextFarming) {
-            nextFarming += (INTERVAL * 3);
-
-            SoyFarms.distributeRewards();
-            Chad.updateTokenPriceAtFarming();
-
-            emit LaunchedRewards(1);
-            // 1 = Farming
-        }
-
-        if(block.timestamp > nextSelfKeep) {
-            nextSelfKeep += (INTERVAL * 3);
-
-            uint busd = BUSD.balanceOf(address(this));
-
-            // Contract receives BUSD from WJK transfer fees
-            // Make sure the contract has enough LINK (at least 100 LINK, dunno why, just to make sure)
-            if(LINK.balanceOf(address(this)) < (100 * 10**18)) {
-                uint busdForLINK = 0;
-
-                // If BUSD revenue is more than 100$
-                if(busd > (100 * 10**18)) {
-                    busdForLINK = 100 * 10**18;
-                }else{ // If less, then we use everything to buy more LINK
-                    busdForLINK = 100 * 10**18 - busd;
-                }
-
-                if(busdForLINK != 0) swap(address(BUSD), address(LINK), busdForLINK, address(this));
-            }
-
-            busd = BUSD.balanceOf(address(this));
-
-            // If revenue more than 1000
-            if(busd > (10 * 10**18)) {
-                // Sent to use from 
-                // cut the BUSD left in half
-                uint halfBUSD = BUSD.balanceOf(address(this)) / 2;
+            // Self keep to fill the treasury
+            uint usdc = USDC.balanceOf(address(this));
+            if(usdc > (100 * 10**_decimals)) {
+                // cut the USDC left in half
+                uint halfUSDC = usdc / 2;
                 // 1 half for Liquidity
-                swapAndLiquify(halfBUSD);
-                // 1 half for Treasury
-                BUSD.safeTransfer(address(Treasury), halfBUSD);
+                swapAndLiquify(halfUSDC);
 
-                // Make sure everything is added properly to the treasury.
-                Treasury.addToTreasury();
+                // Because we are buying WJK off the market, the price goes down.
+                // and then when we supply the tokens to the liquidity pool
+                // we need to supply less wjk for the same amount of usdc
+                // thus, we are left with more WJK
+                wjk.burn(wjk.balanceOf(address(this))); // So we burn the leftovers
+                // We can predict how much USDC we are left with, but its a lot 
+                // better to just call balnaceOf() instead
+                // Because we will need to fetch the old and & new price, which
+                // is expensive
 
-                // Update bond price
-                Chad.updateTokenPriceAtSelfKeep();
+                // Most tokens pair with WFTM, thus we need to swap our tokens with WFTM
+                uint wftm = swap(address(USDC), address(WFTM), USDC.balanceOf(address(this)), address(this));
 
+                // Now we swap WFTM with the tokens we want to invest in
+                uint numOfTokens = getRoleMemberCount(TOKENS);
+                uint share = wftm / numOfTokens - 1;
+                address token;
+                for(uint x = 0; x < numOfTokens; x++) {
+                    token = getRoleMember(TOKENS, x);
+                    uint tBalance = swap(address(WFTM), token, share, address(this));
+                    IERC20(token).approve(address(treasury), tBalance);
+                    /*
+
+                        The issue with Soyfarms is that when you deposit, you reset your epoch time
+                        and as a result you are missing on your first reward, you cannot get your
+                        reward if you keep depositing and reseting your epoch
+                        and soyfarms are designed that way, to not receive rewards on your first epoch
+                        after deposit.
+
+                    */
+                    treasury.deposit(token, tBalance, true);
+                }
             }
-
-            emit LaunchedRewards(2);
-            // 2 = Self keep
         }
 
-        // Future:
-        //  * Rebase
-        //  * Liquidations for loans
+        // Withdraw rewards from Soyfarms
+        treasury.fillBonds();
+
+        totalUpkeeps++;
+
+        emit SelfKeep();
+
+        lock = false;
+    }
+
+    uint public dists = 0;
+    uint public lastDist = block.timestamp;
+    uint private blockNum2 = block.number;
+    function distributeRewards() public {
+        // Can be executed once per 1 hour (3600)
+        if(blockNum2 != block.number && (block.timestamp - lastDist) > DIST_INTERVAL) {
+            lastDist = block.timestamp;
+            blockNum2 = block.number;
+            dists++;
+
+            _distributeRewards();
+        }
+    }
+
+    function _distributeRewards() private {
+        // Launch keeps
+        uint stop = getRoleMemberCount(TARGETS);
+        for (uint x = 0; x < stop; x++) {
+            IDistribute(getRoleMember(TARGETS, x)).distributeRewards();
+        }
     }
 
     function setAddressToken(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        WJK = IERC20(newAddress);
-        grantRole(CONTRACT_ROLE, newAddress);
+        wjk = IERC(newAddress);
     }
-
+    
     function setAddressStaking(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        sWJK = IStaking(newAddress);
-        grantRole(CONTRACT_ROLE, newAddress);
+        swjk = newAddress;
     }
 
-    function setAddressChad(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        Chad = IChad(newAddress);
-        grantRole(CONTRACT_ROLE, newAddress);
+    function setAddressBonds(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        chad = IChad(newAddress);
     }
 
     function setAddressTreasury(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        Treasury = ITreasury(newAddress);
-        grantRole(CONTRACT_ROLE, newAddress);
+        treasury = ITreasury(newAddress);
     }
 
-    function setAddressSoyFarm(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        SoyFarms = ISoyFarms(newAddress);
-        grantRole(CONTRACT_ROLE, newAddress);
+    function swapAndLiquify(uint usdcAmount) private {
+        // Solidity is not accurate, because it uses whole numbers instead of fractions
+        // So if we get a fraction it will eliminate the dot and we won't get precise amount
+        // Its better to give up on the last number than deal with a failed tx
+        uint half = usdcAmount / 2 - 1; 
+        uint wjkAmount = swap(address(USDC), address(wjk), half, address(this)); 
+        addLiquidity(half, wjkAmount);
     }
 
-    function swapAndLiquify(uint256 busdAmount) private {
-        uint256 halfBUSDAmount = busdAmount / 2;
-        uint256 wjkAmount = swap(address(BUSD), address(WJK), halfBUSDAmount, address(Treasury)); 
-        addLiquidity(halfBUSDAmount, wjkAmount);
-        emit SwapAndLiquify(halfBUSDAmount, wjkAmount);
-    }
-
-    function swap(address token1, address token2, uint256 amount, address to) private returns (uint) {
+    function swap(address token0, address token1, uint amount, address to) private returns (uint) {
         address[] memory path = new address[](2);
-        path[0] = address(token1);  
-        path[1] = address(token2);
+        path[0] = token0;  
+        path[1] = token1;
 
-        IERC20(address(token1)).approve(address(pancakeswapRouter), amount);
-
-        uint[] memory amounts = pancakeswapRouter.swapExactTokensForTokens(
-            amount,
-            0, // Accept any amount of tokens back
-            path,
-            to, // Give the LP tokens to the treasury
-            block.timestamp
-        );
+        IERC20(token0).approve(address(SWAP_ROUTER), amount);
+        uint[] memory amounts = SWAP_ROUTER.swapExactTokensForTokens(amount, 0, path, to, block.timestamp);
         return amounts[amounts.length - 1];
     }
 
-    function addLiquidity(uint busdAmount, uint wjkAmount) private {
-        IERC20(address(BUSD)).approve(address(pancakeswapRouter), busdAmount);
-        IERC20(address(WJK)).approve(address(pancakeswapRouter), wjkAmount);
+    function addLiquidity(uint usdcAmount, uint wjkAmount) private {
+        USDC.approve(address(SWAP_ROUTER), usdcAmount);
+        wjk.approve(address(SWAP_ROUTER), wjkAmount);
 
-        pancakeswapRouter.addLiquidity(address(WJK), address(BUSD),0,0,0,0, address(Treasury), block.timestamp);
+        SWAP_ROUTER.addLiquidity(
+            address(wjk), address(USDC),
+            wjkAmount, usdcAmount,
+            0,0, 
+            address(this),
+            block.timestamp);
     }
 }
 
-interface IStaking {
-    function distributeRewards() external;
+interface IERC is IERC20 {
+    function burn(uint) external;
 }
 
 interface IChad {
-    function updateTokenPriceAtFarming() external;
-    function updateTokenPriceAtSelfKeep() external;
-    function updateTokenPriceAtStaking() external;
-    function increaseAvailable() external;
+    function updatePrice() external;
 }
 
 interface ITreasury {
-    function addToTreasury() external;
+    function fillBonds() external;
+    function deposit(address, uint, bool) external;
 }
 
-interface ISoyFarms {
+interface IDistribute {
     function distributeRewards() external;
+}
+
+interface IStakeLocker {
+    function depositUSDC(uint) external;
 }

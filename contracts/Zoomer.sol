@@ -14,11 +14,11 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./IPancakeswap.sol";
 
-contract Boomer is ERC20, AccessControlEnumerable {
+contract Zoomer is ERC20, AccessControlEnumerable {
     using SafeERC20 for IWojak;
     using SafeERC20 for IERC20;
 
-    event Stake(uint boomerAmount);
+    event Stake(uint zoomerAmount);
     event Unstake(uint wjkAmount);
     event RewardsDistributed(uint rewards);
 
@@ -41,7 +41,7 @@ contract Boomer is ERC20, AccessControlEnumerable {
     IERC20 public constant USDC = IERC20(0x04068DA6C83AFCFA0e13ba15A6696662335D5B75);
     IUniswapV2Router02 public constant SWAP_ROUTER = IUniswapV2Router02(0xF491e7B69E4244ad4002BC14e878a34207E38c29);
 
-    constructor() ERC20("Boomer Staking", "BOOMER") {
+    constructor() ERC20("Zoomer Staking", "ZOOMER") {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(CONTRACT_ROLE, msg.sender);
     }
@@ -52,42 +52,30 @@ contract Boomer is ERC20, AccessControlEnumerable {
         return _stake(wjkAmount);
     }
 
-    function stake(uint wjkAmount) public returns (uint) {
-        require(!lock, "BMR:Distribution is going on");
-        return _stake(wjkAmount);
-    }
-
     function _stake(uint wjkAmount) private returns (uint) {
-        require(!disabled, "BMR:Stake is disabled, withdraw only");
+        require(!disabled, "ZMR:Stake is disabled, withdraw only");
         
         // We transfer his tokens to the smart contract, its now in its posession
         wjk.safeTransferFrom(msg.sender, address(this), wjkAmount);
-
-        uint fivePercent = wjkAmount / 50;
-        uint usdc = swap(fivePercent);
-        USDC.safeTransfer(keeper, usdc);
-        wjkAmount -= fivePercent;
         
         if(balanceOf(msg.sender) == 0) _grantRole(STAKERS, msg.sender);
         
-        uint boomerAmount = boomersForMe(wjkAmount);
+        uint zoomerAmount = zoomersForMe(wjkAmount);
         wjkBalance += wjkAmount;
 
         // We can now mint, a dangerous function to our economy :o
-        _mint(msg.sender, boomerAmount); // Mint Boomer tokens to his account
+        _mint(msg.sender, zoomerAmount); // Mint Zoomer tokens to his account
 
-        emit Stake(boomerAmount);
-        IKeeper(keeper).distributeRewards();
+        emit Stake(zoomerAmount);
 
-        return boomerAmount;
+        return zoomerAmount;
     }
 
     function unstake(uint bAmount) public onlyRole(STAKERS) returns(uint) {
-        require(!lock, "BMR:Distribution is going on");
         // He requests back more than he can
-        require(balanceOf(msg.sender) >= bAmount, "BMR:No tokens to unstake");
+        require(balanceOf(msg.sender) >= bAmount, "ZMR:No tokens to unstake");
 
-        // We burn his Boomers
+        // We burn his Zoomers
         uint wjkAmount = balanceOfUnderlying(bAmount);
         wjkBalance -= wjkAmount;
         // We don't need his BOOMER tokens
@@ -98,14 +86,13 @@ contract Boomer is ERC20, AccessControlEnumerable {
         wjk.safeTransfer(msg.sender, wjkAmount);
 
         emit Unstake(wjkAmount);
-        IKeeper(keeper).distributeRewards();
 
         return wjkAmount;
     }
 
     // ------- Helpers
 
-    function boomersForMe(uint amount) public view returns (uint) {
+    function zoomersForMe(uint amount) public view returns (uint) {
         // swjk * index = wjk
         return (amount * 1e18) / index;
     }
@@ -122,13 +109,12 @@ contract Boomer is ERC20, AccessControlEnumerable {
     uint private lastDist = block.timestamp;
     uint private blockNum = block.number;
     function distributeRewards() public onlyRole(CONTRACT_ROLE) {
-        if(wjkBalance > 1e18 && (block.timestamp - lastDist) > 86400 && blockNum != block.number) { // Has more than 1 WJK staked
-            lock = true;
-            blockNum = block.number;
+        if(wjkBalance > 1e18 && (block.timestamp - lastDist) > 86400 && blockNum != block.number) {
             // We just raise the amount of wjk contract holds
             uint totalRewards = wjkBalance / 400;
 
             // Mint to the contract
+            
             wjk.mint(address(this), totalRewards);
             wjkBalance += totalRewards;
 
@@ -136,11 +122,11 @@ contract Boomer is ERC20, AccessControlEnumerable {
 
 
             if(wjk.balanceOf(address(chad)) < (wjk.totalSupply() / 10)) {
-                wjk.mint(address(chad), totalRewards / 10); // + 10% to be transferred to bonds
+                uint tenPercent = totalRewards / 10; // + 10% to be sold at the market
+                wjk.mint(address(chad), tenPercent);
             }
 
             emit RewardsDistributed(totalRewards);
-            lock = false;
         }
     }
 
@@ -183,8 +169,4 @@ contract Boomer is ERC20, AccessControlEnumerable {
 interface IWojak is IERC20 {
     function mint(address, uint) external;
     function burn(uint) external;
-}
-
-interface IKeeper {
-    function distributeRewards() external;
 }

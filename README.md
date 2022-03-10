@@ -9,11 +9,50 @@ Tokenomics:
 1,320,000$:LP
 1,320,000$:Treasury
 
-Testnet:
-Bonds deployed to:       0x84e749E2228AeF3AAC92Af33389CED9540263fcB
-SoyFarms deployed to:    0x8F04b4652F7e8b79F38cE8dE08eEf0FE745476c6
-Staking deployed to:     0x2a3EcF313a26a65B4d88dac36ef687A992CC87E9
-Token deployed to:       0x07D374f163be30377D226b40bfd989fF42615237
-Treasury deployed to:    0x06735E4287bb868CE97bC13f8b6EAA972E71B013
-TStrategy deployed to:   0x7A643E8e3dF8545ba7ee8Bdb0629799E26a970fa
-Keeper deployed to:      0x55f84F0395180A83AC4C4a197F020433834187Bc
+
+| Blockchain          | Lending   | Swap        | Bridge     | Weighted                                     | SoyFarm(DeFi)                | SoyFarm(Rebase)      | SoyFarm(Seigniorage) |
+| ------------------- | --------- | ----------- | ---------- | -------------------------------------------- | ---------------------------- | -------------------- | -------------------- |
+| Ethereum            | Compound  | Uniswap     | Multichain | IronBank, Cream, Ooki                        |                              | Olympus              |                      |
+| Binance Smart Chain | Atlantis  | Pancakeswap | Multichain | Atlantis, Alpaca, Ooki, Wowswap, Ramp, Cream | Cake, ACS, Banana, BSW, BABY | Gyro, Hunny          | BOMB, CHARGE, DIBS   |
+| Polygon             | Atlantis  | Quickswap   | Multichain | Atlantis, Ooki, Ramp, Cream                  | QUICK                        | Klima, Clam          | KITTY                |
+| Avalanche           | TraderJoe | TraderJoe   | Multichain | TraderJoe, IronBank, Cream, Blizz            | xJOE                         | Wonderland, SnowBank | KITTY, WINE, HERMES  |
+| Fantom              | Scream    | Spookyswap  | Multichain | IronBank, Cream, Geist                       | xBOO, xSCREAM                | Hector               | TOMB                 |
+| Arbitrum            | Channels  | Honeyswap   | Multichain |                                              |                              | Umami                |                      |
+| HECO                | Channels  | MDEX        | Multichain |                                              |                              |                      |                      |
+| Cronos              | Tectonic  | VVS Finance | Multichain |                                              |                              |                      | DarkCrypto           |
+| Harmony             | Tranquil  | Viperswap   | Multichain |                                              | VIPER                        | WAGMI, TridentDAO    | UNITE, QUARTZ        |
+| Gnosis              | Agave     | Honeyswap   | Multichain |                                              |                              |                      |                      |
+| KCC                 |           | Kuswap      | Multichain |                                              |                              |                      |                      |
+| Aurora              |           | Trisolaris  | Multichain |                                              |                              |                      | Empyrean             |
+| Moonriver           |           | Solarbeam   | Multichain |                                              | SOLAR                        | ROME                 | Athena(OWL)          |
+| Klaytn              |           | Klayswap    |            |                                              |                              |                      |                      |
+| OKEx                |           | JSwap       |            |                                              |                              |                      |                      |
+| Fuse                |           | Voltage     | Multichain |                                              |                              |                      |                      |
+| Telos               |           | Sushi       | Multichain |                                              |                              |                      |                      |
+| Metis               |           | Netswap     | Multichain |                                              |                              |                      | HADES, Oceanus       |
+| Velas               |           | Wagyuswap   |            |                                              |                              |                      |                      |
+| Tomochain           |           | Luaswap     |            |                                              |                              |                      |                      |
+| Gochain             |           | GoSwap      |            |                                              |                              |                      |                      |
+| Oasis               |           |             |            |                                              |                              |                      | Tulip                |
+
+
+
+
+
+
+# TODO
+1. Test all `Treasury` functionality
+2. Test all `Locker` functionality
+3. Finish website
+
+4. Re-test everything (again)
+General use, multiple accounts
+
+
+- Finito
+
+Preparation for setup
+- Domain
+- `Surge` or `Vercel`
+- GitBook
+- Social media

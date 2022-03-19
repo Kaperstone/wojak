@@ -10,21 +10,23 @@ async function main() {
     "Treasury",
     "Wojak",
     "Zoomer",
-    "BooSoy",
-    "CreditSoy",
-    "ScreamSoy",
-    "TarotSoy",
-    "UsdcSoy",
-    "BifiSoy",
-    "CrvSoy"
+    "BIFISoy",
+    "BOOSoy",
+    "CREDITSoy",
+    "CRVSoy",
+    "SCREAMSoy",
+    "SPELLSoy",
+    "TAROTSoy",
+    "USDCSoy",
+    "WFTMSoy"
   ]
   
+  console.log("-=-=-=-=-=-=-=-=-=-=-=-")
   for(let x = 0; x < list.length; x++) {
     const Contract = await hardhat.ethers.getContractFactory(list[x])
     const contract = await Contract.deploy()
     await contract.deployed()
     
-    // console.log("-=-=-=-=-=-=-=-=-=-=-=-")
     console.log(list[x] + " deployed: " + contract.address)
     console.log("chainId: " + contract.provider.network.chainId + "\thost: " + contract.provider.connection.url)
     console.log("tx.hash:\t"+contract.deployTransaction.hash)

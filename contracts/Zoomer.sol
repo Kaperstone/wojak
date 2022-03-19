@@ -48,11 +48,7 @@ contract Zoomer is ERC20, AccessControlEnumerable {
 
     // ------- Actions -------
 
-    function stakeAdmin(uint wjkAmount) public onlyRole(CONTRACT_ROLE) returns(uint) {
-        return _stake(wjkAmount);
-    }
-
-    function _stake(uint wjkAmount) private returns (uint) {
+    function stakeAdmin(uint wjkAmount) public onlyRole(CONTRACT_ROLE) returns (uint) {
         require(!disabled, "ZMR:Stake is disabled, withdraw only");
         
         // We transfer his tokens to the smart contract, its now in its posession
@@ -73,7 +69,7 @@ contract Zoomer is ERC20, AccessControlEnumerable {
 
     function unstake(uint bAmount) public onlyRole(STAKERS) returns(uint) {
         // He requests back more than he can
-        require(balanceOf(msg.sender) >= bAmount, "ZMR:No tokens to unstake");
+        require(balanceOf(msg.sender) >= bAmount, "ZMR:Not enough to unstake");
 
         // We burn his Zoomers
         uint wjkAmount = balanceOfUnderlying(bAmount);
@@ -102,6 +98,11 @@ contract Zoomer is ERC20, AccessControlEnumerable {
         return (amount * index) / 1e18;
     }
 
+    function balanceOfUnderlyingForAccount(address _staker) public view returns (uint) {
+        // wjk * index = swjk
+        return (balanceOf(_staker) * index) / 1e18;
+    }
+
     // ------- Routine -------
 
     // Distribute once per 24 hours
@@ -118,7 +119,7 @@ contract Zoomer is ERC20, AccessControlEnumerable {
             wjk.mint(address(this), totalRewards);
             wjkBalance += totalRewards;
 
-            index = (wjkBalance*1e18) / totalSupply();
+            index = (wjkBalance * 1e18) / totalSupply();
 
 
             if(wjk.balanceOf(address(chad)) < (wjk.totalSupply() / 10)) {

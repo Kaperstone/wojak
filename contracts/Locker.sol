@@ -91,7 +91,7 @@ contract Locker is ERC20, AccessControlEnumerable {
 
     function depositToBank(address tokenAddress, uint amount) public {
         // This is a must
-        require(!hasRole(TOKENS, tokenAddress), "Disallowed token");
+        require(hasRole(TOKENS, tokenAddress), "Disallowed token");
         // At first, transfer it to us
         IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), amount);
         // Record it to history
@@ -121,7 +121,7 @@ contract Locker is ERC20, AccessControlEnumerable {
             // Account is already registered, he has an epoch recorded
             // To keep math correct, we withdraw all of his rewards
             // This will also reset the lockup.
-            (tokens, amounts, decimals) = _withdrawRewards(balanceOf(msg.sender));
+            _withdrawRewards(balanceOf(msg.sender));
         }
 
         swjkBalance += swjkAmount;
@@ -135,18 +135,17 @@ contract Locker is ERC20, AccessControlEnumerable {
         return (tokens, amounts, decimals);
     }
 
-    function leave(uint lockAmount) public returns (address[] memory tokens, uint[] memory amounts, uint8[] memory decimals) {
+    function leave(uint lockAmount) public {
         // 30 epochs
         require((block.timestamp - timeleft[msg.sender]) > LOCK_TIME, "You cannot withdraw yet.");
-        
-        return _leave(lockAmount);
+        _leave(lockAmount);
     }
 
-    function leaveAdmin(uint lockAmount) public onlyRole(CONTRACT_ROLE) returns (address[] memory tokens, uint[] memory amounts, uint8[] memory decimals) {
-        return _leave(lockAmount);
+    function leaveAdmin(uint lockAmount) public onlyRole(CONTRACT_ROLE) {
+        _leave(lockAmount);
     }
     
-    function _leave(uint lockAmount) private onlyRole(LOCKERS) returns (address[] memory tokens, uint[] memory amounts, uint8[] memory decimals) {
+    function _leave(uint lockAmount) private onlyRole(LOCKERS) {
         require(!lock, "Distribution is going on");
         require(balanceOf(msg.sender) >= lockAmount, "Insufficient amount");
         
@@ -154,7 +153,7 @@ contract Locker is ERC20, AccessControlEnumerable {
         swjkBalance -= lockAmount;
         if(epochIndex == epochs[msg.sender]) swjkOverflow -= lockAmount; // only useful in dev. mode
 
-        (tokens, amounts, decimals) = _withdrawRewards(lockAmount);
+        _withdrawRewards(lockAmount);
         uint wjkAmount = wjk.balanceOf(address(this));
         statsBurntWJK += wjkAmount;
         wjk.burn(wjkAmount);
@@ -167,11 +166,11 @@ contract Locker is ERC20, AccessControlEnumerable {
     }
 
     // public function, accounts can withdraw rewards without withdrawing usdc
-    function withdrawRewards() public returns (address[] memory, uint[] memory, uint8[] memory) {
-        return _withdrawRewards(balanceOf(msg.sender));
+    function withdrawRewards() public {
+        _withdrawRewards(balanceOf(msg.sender));
     }
 
-    function _withdrawRewards(uint lockAmount) private returns (address[] memory tokens, uint[] memory amounts, uint8[] memory decimals) {
+    function _withdrawRewards(uint lockAmount) private {
         uint cEpoch = epochs[msg.sender] + 1;
 
         if(hasRole(LOCKERS, msg.sender) && cEpoch < epochIndex) {
@@ -180,27 +179,30 @@ contract Locker is ERC20, AccessControlEnumerable {
 
             uint stop = getRoleMemberCount(TOKENS);
 
+            address tokenAddress;
+            uint tokenAmount;
+            uint8 tokenDecimals;
             for(uint y = 0; y < stop; y++) {
-                tokens[y] = getRoleMember(TOKENS, y);
-
-                decimals[y] = IERC(tokens[y]).decimals();
+                tokenAddress = getRoleMember(TOKENS, y);
+                tokenAmount = 0;
+                tokenDecimals = IERC(tokenAddress).decimals();
 
                 // Loop from the epoch he entered to the current epoch and collect all rewards
                 for(uint x = cEpoch; x <= epochIndex; x++) 
-                    if(swjkHistory[x] > 0 && token[tokens[y]].history[x] > 0) 
-                        amounts[y] += (token[tokens[y]].history[x]*10**(18 - decimals[y] + 18)) / ((swjkHistory[x]*10**(36 - decimals[y])) / lockAmount);
+                    if(swjkHistory[x] > 0 && token[tokenAddress].history[x] > 0) 
+                        tokenAmount += (token[tokenAddress].history[x]*10**(18 - tokenDecimals + 18)) / ((swjkHistory[x]*10**(36 - tokenDecimals)) / lockAmount);
 
-                if(amounts[y] > 0) {
-                    if(token[tokens[y]].strategy != address(0)) 
-                        IStrategy(token[tokens[y]].strategy).withdrawAdmin(amounts[y]);
-                    token[tokens[y]].balance -= amounts[y];
-                    token[tokens[y]].record -= amounts[y];
-                    IERC20(tokens[y]).safeTransfer(msg.sender, amounts[y]);
+                if(tokenAmount > 0) {
+                    if(token[tokenAddress].strategy != address(0)) 
+                        IStrategy(token[tokenAddress].strategy).withdrawAdmin(tokenAmount);
+                    require(token[tokenAddress].balance >= tokenAmount, "Not enough in the balance to send");
+                    require(token[tokenAddress].record >= tokenAmount, "Not enough in the record decrease");
+                    token[tokenAddress].balance -= tokenAmount;
+                    token[tokenAddress].record -= tokenAmount;
+                    IERC20(tokenAddress).safeTransfer(msg.sender, tokenAmount -2);
                 }
             }
         }
-
-        return (tokens, amounts, decimals);
     }
 
     // ------- Helpers -------

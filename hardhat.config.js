@@ -32,7 +32,7 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 999,
+        runs: 200,
       }
     }
   },
@@ -53,23 +53,42 @@ module.exports = {
       accounts: ["eac02834adc5c16d756af6cacc67abcdadbb2be4080a19e56f61ecb20fd616b8"],
       chainId: 1337,
       gasPrice: 20000000000,
-      timeout: 2000000000,
+      // timeout: 2000000000,
     },
     hardhat: {
       from: "0xB14Ba501390A89A9E8e6C4E2f8ef95e3124B2119",
       accounts: [
         {
           privateKey: "eac02834adc5c16d756af6cacc67abcdadbb2be4080a19e56f61ecb20fd616b8",
-          balance: "500000000000000000000000000" // 500mil :)
+          balance: "1000000000000000000000000000" // 1bil
+        },
+        {
+          privateKey: "79f8042dc8daff41e73fba873976e849c0c5e0503ba9cb43e9b0c52dd885f121",
+          balance: "1000000000000000000000000000" // 1bil
         }
       ],
       forking: {
-        url: "https://apis-sj.ankr.com/c2e370321311467885a63632ca3118d2/e7af78440c6d117d158147628814aae7/fantom/full/main"
+        url: "https://rpc.ftm.tools/"
       },
       chainId: 1337,
+      chains: {
+        250: {
+          hardforkHistory: {
+            london: 33509400
+          },
+        }
+      },
+      hardfork: "london",
       mining: {
-        auto: true
+        auto: false,
+        interval: [3000, 6000]
       }
+    },
+    fantom: {
+      url: "https://rpc.ftm.tools/",
+      from: "0x41227A3F9Df302d6fBDf7dD1b3261928ba789D47",
+      accounts: ["6f146b6477982cdd981508660751a122b629cbfc0e903ac2f030e1ea1316bf18"],
+      chainId: 250
     },
     //////////////////////////////////////////////////////////////
     testnet: {
@@ -87,11 +106,11 @@ module.exports = {
     }
   },
   contractSizer: {
-    alphaSort: true,
+    alphaSort: false,
     disambiguatePaths: false,
     runOnCompile: true,
     strict: true,
-    only: [':ERC20$'],
+    only: [],
   },
   watcher: {
     test: {

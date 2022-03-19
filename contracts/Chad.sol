@@ -64,7 +64,6 @@ contract Chad is ERC20, AccessControlEnumerable {
         _grantRole(BONDERS, msg.sender);
 
         emit Bond(totalForPayment, wjkAmount);
-        IKeeper(keeper).distributeRewards();
 
         return totalForPayment;
     }
@@ -82,7 +81,6 @@ contract Chad is ERC20, AccessControlEnumerable {
         _revokeRole(BONDERS, msg.sender);
 
         emit BondClaimed(bondSize);
-        IKeeper(keeper).distributeRewards();
 
         return bondSize;
     }
@@ -138,8 +136,4 @@ interface IStaking is IERC20 {
 
 interface IIERC20 is IERC20 {
     function decimals() external returns (uint);
-}
-
-interface IKeeper {
-    function distributeRewards() external;
 }

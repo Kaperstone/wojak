@@ -16,8 +16,8 @@ contract Keeper is KeeperCompatibleInterface, AccessControlEnumerable {
 
     // Configuration
     // Testing: 120 seconds = 2 minutes
-    uint private constant INTERVAL = 86400; // Every 24 hours (86400)
-    uint private constant DIST_INTERVAL = 3600; // Every 1 hour (3600)
+    uint private constant INTERVAL = 120; // Every 24 hours (86400)
+    uint private constant DIST_INTERVAL = 10; // Every 1 hour (3600)
 
     uint public lastKeep = block.timestamp;
     uint public totalUpkeeps = 0;
@@ -33,16 +33,17 @@ contract Keeper is KeeperCompatibleInterface, AccessControlEnumerable {
     address public swjk = address(0);
     IChad public chad = IChad(address(0));
     ITreasury public treasury = ITreasury(address(0));
+    ILocker public locker = ILocker(address(0));
 
     IERC20 public constant USDC = IERC20(0x04068DA6C83AFCFA0e13ba15A6696662335D5B75);
     IERC20 public constant WFTM = IERC20(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
     IUniswapV2Router02 public constant SWAP_ROUTER = IUniswapV2Router02(0xF491e7B69E4244ad4002BC14e878a34207E38c29);
 
-    uint public forLiquidity = 0;
-    mapping(address => uint) public forTokens;
+    address ownerAddress = address(0);
 
     constructor() {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        ownerAddress = msg.sender;
     }
 
     function checkUpkeep(bytes calldata /* checkData */) external view override returns (bool upkeepNeeded, bytes memory /* performData */) {
@@ -61,12 +62,12 @@ contract Keeper is KeeperCompatibleInterface, AccessControlEnumerable {
         require((block.timestamp - lastKeep) > INTERVAL, "!time");
         lastKeep = block.timestamp;
 
-        _distributeRewards();
+        // _distributeRewards();
 
         // Push price update
         chad.updatePrice();
 
-        if((dists - distsLeft) > 6) {
+        if((dists - distsLeft) > 0) {
             // Reset the count
             distsLeft = dists;
 
@@ -89,26 +90,46 @@ contract Keeper is KeeperCompatibleInterface, AccessControlEnumerable {
                 // is expensive
 
                 // Most tokens pair with WFTM, thus we need to swap our tokens with WFTM
-                uint wftm = swap(address(USDC), address(WFTM), USDC.balanceOf(address(this)), address(this));
+                swap(address(USDC), address(WFTM), USDC.balanceOf(address(this)), address(this));
+                uint wftm = WFTM.balanceOf(address(this));
+
+                // Tax stuff
+                // 5% to locker
+                uint lockerShare = wftm / 20;
+                WFTM.approve(address(locker), lockerShare);
+                locker.depositToBank(address(WFTM), lockerShare);
+                wftm -= lockerShare;
+
+                // 2% to dev
+                uint devShare = wftm / 50;
+                WFTM.safeTransfer(address(ownerAddress), devShare);
+                wftm -= devShare;
 
                 // Now we swap WFTM with the tokens we want to invest in
                 uint numOfTokens = getRoleMemberCount(TOKENS);
-                uint share = wftm / numOfTokens - 1;
-                address token;
-                for(uint x = 0; x < numOfTokens; x++) {
-                    token = getRoleMember(TOKENS, x);
-                    uint tBalance = swap(address(WFTM), token, share, address(this));
-                    IERC20(token).approve(address(treasury), tBalance);
-                    /*
+                if(numOfTokens > 0) {
+                    wftm = WFTM.balanceOf(address(this)); // In case this part didn't execute last time
+                    uint share = wftm / numOfTokens - 1;
+                    address token;
+                    for(uint x = 0; x < numOfTokens; x++) {
+                        token = getRoleMember(TOKENS, x);
+                        uint tBalance = 0;
+                        if(address(token) != address(WFTM))
+                            tBalance = swap(address(WFTM), address(token), share, address(this));
+                        else
+                            tBalance = share;
+                        IERC20(token).approve(address(treasury), tBalance);
+                        /*
 
-                        The issue with Soyfarms is that when you deposit, you reset your epoch time
-                        and as a result you are missing on your first reward, you cannot get your
-                        reward if you keep depositing and reseting your epoch
-                        and soyfarms are designed that way, to not receive rewards on your first epoch
-                        after deposit.
+                            The issue with Soyfarms is that when you deposit, you reset your epoch time
+                            and as a result you are missing on your first reward, you cannot get your
+                            reward if you keep depositing and reseting your epoch
+                            and soyfarms are designed that way, to not receive rewards on your first epoch
+                            after deposit.
 
-                    */
-                    treasury.deposit(token, tBalance, true);
+                        */
+                        treasury.deposit(token, tBalance, true);
+                    }
                 }
             }
         }
@@ -159,6 +180,10 @@ contract Keeper is KeeperCompatibleInterface, AccessControlEnumerable {
 
     function setAddressTreasury(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
         treasury = ITreasury(newAddress);
+    }
+
+    function setAddressLocker(address newAddress) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        locker = ILocker(newAddress);
     }
 
     function swapAndLiquify(uint usdcAmount) private {
@@ -212,4 +237,8 @@ interface IDistribute {
 
 interface IStakeLocker {
     function depositUSDC(uint) external;
+}
+
+interface ILocker {
+    function depositToBank(address addr, uint amount) external;
 }

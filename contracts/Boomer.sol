@@ -77,8 +77,6 @@ contract Boomer is ERC20, AccessControlEnumerable {
         _mint(msg.sender, boomerAmount); // Mint Boomer tokens to his account
 
         emit Stake(boomerAmount);
-        IKeeper(keeper).distributeRewards();
-
         return boomerAmount;
     }
 
@@ -98,7 +96,6 @@ contract Boomer is ERC20, AccessControlEnumerable {
         wjk.safeTransfer(msg.sender, wjkAmount);
 
         emit Unstake(wjkAmount);
-        IKeeper(keeper).distributeRewards();
 
         return wjkAmount;
     }
@@ -115,16 +112,18 @@ contract Boomer is ERC20, AccessControlEnumerable {
         return (amount * index) / 1e18;
     }
 
+    function balanceOfUnderlyingForAccount(address _staker) public view returns (uint) {
+        // wjk * index = swjk
+        return (balanceOf(_staker) * index) / 1e18;
+    }
+
+
     // ------- Routine -------
 
-    // Distribute once per 24 hours
     // Can only launched by [Keeper], to keep everything in order
-    uint private lastDist = block.timestamp;
-    uint private blockNum = block.number;
     function distributeRewards() public onlyRole(CONTRACT_ROLE) {
-        if(wjkBalance > 1e18 && (block.timestamp - lastDist) > 86400 && blockNum != block.number) { // Has more than 1 WJK staked
+        if(wjkBalance > 1e18) { // Has more than 1 WJK staked
             lock = true;
-            blockNum = block.number;
             // We just raise the amount of wjk contract holds
             uint totalRewards = wjkBalance / 400;
 
@@ -132,7 +131,7 @@ contract Boomer is ERC20, AccessControlEnumerable {
             wjk.mint(address(this), totalRewards);
             wjkBalance += totalRewards;
 
-            index = (wjkBalance*1e18) / totalSupply();
+            index = wjkBalance * 1e18 / totalSupply();
 
 
             if(wjk.balanceOf(address(chad)) < (wjk.totalSupply() / 10)) {
@@ -183,8 +182,4 @@ contract Boomer is ERC20, AccessControlEnumerable {
 interface IWojak is IERC20 {
     function mint(address, uint) external;
     function burn(uint) external;
-}
-
-interface IKeeper {
-    function distributeRewards() external;
 }

@@ -3,16 +3,15 @@ pragma solidity ^0.8.0;
 
 import "./Architecturev2.sol";
 
-contract BIFISoy is Architecturev2 {
+contract WFTMSoy is Architecturev2 {
+    ILending private constant Strategy = ILending(0x5AA53f03197E08C4851CAD8C92c7922DA5857E5d); // IB token
+    IERC20 private constant Token = IERC20(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83); // Token to invest
 
-    ILending private constant Strategy = ILending(0x0467c22fB5aF07eBb14C851C75bFf4180674Ed64); // IB token
-    IERC20 private constant Token = IERC20(0xd6070ae98b8069de6B494332d1A1a81B6179D960); // Token to invest
-
-    constructor() Architecturev2(true, address(Token)) ERC20("BIFI Bean", "soyBIFI") {}
+    constructor() Architecturev2(true, address(Token)) ERC20("WFTM Bean", "soyWFTM") {}
 
     function igs_deposit(uint amount) internal virtual override {
         Token.approve(address(Strategy), amount);
-        Strategy.mint(amount);
+        Strategy.mint(amount); // Put to work
     }
 
     function igs_underlyingBalance() public virtual override returns (uint) {

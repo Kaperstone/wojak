@@ -144,7 +144,7 @@ contract Treasury is AccessControlEnumerable {
         for(uint x = 0; x < getRoleMemberCount(TOKENS); x++) {
             address memberAddress = getRoleMember(TOKENS, x);
             if(token[memberAddress].balance > 0)
-                ITStrategy(token[memberAddress].strategy).withdrawRewards();
+                ITStrategy(token[memberAddress].strategy).withdrawRewards(address(this));
         }
         
         uint chadBalance = wjk.balanceOf(address(chad));
@@ -238,9 +238,12 @@ contract Treasury is AccessControlEnumerable {
 
         // We can proceed to actually exiting the market
         // We don't need to use `withdraw` because disableStrategy does just about this.
-        
-        uint wftmAmount = swap(tokenAddress, WFTM, IERC20(tokenAddress).balanceOf(address(this)), address(this));
-        return swap(WFTM, USDC, wftmAmount, address(this));
+        uint wftmAmount = 0;
+        if(tokenAddress != address(WFTM))
+            wftmAmount = swap(tokenAddress, address(WFTM), IERC20(tokenAddress).balanceOf(address(this)), address(this));
+        else
+            wftmAmount = IERC20(WFTM).balanceOf(address(this));
+        return swap(address(WFTM), address(USDC), wftmAmount, address(this));
     }
 
     function swap(address token0, address token1, uint amount, address to) private returns (uint) {
@@ -263,5 +266,5 @@ interface ITStrategy {
     function balanceOf(address) external view returns (uint);
     function depositAdmin(uint) external;
     function withdrawAdmin(uint) external returns (uint);
-    function withdrawRewards() external;
+    function withdrawRewards(address) external;
 }
